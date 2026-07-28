@@ -13,7 +13,11 @@ import {
 } from "./store.js";
 
 const MAX_BODY = 12 * 1024 * 1024;
-const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
+const LEGACY_PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
+const SHADCN_PUBLIC_DIR = fileURLToPath(new URL("../web/out", import.meta.url));
+const PUBLIC_DIR = existsSync(join(SHADCN_PUBLIC_DIR, "index.html"))
+  ? SHADCN_PUBLIC_DIR
+  : LEGACY_PUBLIC_DIR;
 const MIME = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -23,6 +27,9 @@ const MIME = {
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".webmanifest": "application/manifest+json",
+  ".woff2": "font/woff2",
+  ".xml": "application/xml; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
 };
 
 export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) {

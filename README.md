@@ -15,6 +15,16 @@ Momento brings **X Hearts + Bookmarks** into one searchable archive without flat
 - Plain markdown mirror for Obsidian and local agents
 - Local-first: browser cookies never leave the extension
 
+## Interface
+
+The mobile PWA uses the requested shadcn preset:
+
+```bash
+bunx --bun shadcn@latest init --preset b3Zheoix4U --template next
+```
+
+It lives in [`web/`](./web): Next.js 16, Base UI primitives, the `base-sera` style, stone tokens, Oxanium/Geist type, and Phosphor icons. The production export is committed so `momento serve` stays zero-dependency.
+
 ## Quick start
 
 Requires Node 20+ and Chrome/Arc/Brave/Edge.
