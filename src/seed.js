@@ -16,7 +16,7 @@ export const DEMO_LIKES = [
   },
   {
     id: "1000000000000000003",
-    text: "Local agents beat cloud dashboards when the job is finding something you saved once a year.",
+    text: "Local agents beat cloud dashboards when the job is finding something you saved once a year. Memory is a filing problem.",
     url: "https://x.com/geetkhosla/status/1000000000000000003",
     postedAt: "2026-07-27T09:00:00.000Z",
     author: { handle: "geetkhosla", displayName: "Geet Khosla" },

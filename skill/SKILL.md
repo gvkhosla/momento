@@ -1,6 +1,6 @@
 ---
 name: momento
-description: Search the user's X/Twitter likes vault (local markdown from the momento CLI). Use when they ask about something they momento, faved, or hearted on X/Twitter.
+description: Search the user's X/Twitter likes vault (local markdown from the momento CLI). Use when they ask about something they liked, faved, or hearted on X/Twitter.
 ---
 
 # momento
