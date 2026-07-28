@@ -1,128 +1,110 @@
-// Sniff X's live Likes GraphQL request so we self-heal when query IDs rotate.
+// Capture X's live GraphQL config so rotating query IDs do not break Momento.
 
-const URL_PATTERN = /\/i\/api\/graphql\/([^/]+)\/Likes(?:\b|\/|\?)/;
 const BEARER =
   "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
+const PATTERN = /\/i\/api\/graphql\/([^/]+)\/(Likes|Bookmarks)(?:\b|\/|\?)/;
 
 export function installSniffer() {
   chrome.webRequest.onBeforeRequest.addListener(
     (details) => {
-      const m = details.url.match(URL_PATTERN);
-      if (!m) return;
+      const match = details.url.match(PATTERN);
+      if (!match) return;
       try {
-        const u = new URL(details.url);
-        const features = u.searchParams.get("features");
-        const variables = u.searchParams.get("variables");
+        const url = new URL(details.url);
+        const features = url.searchParams.get("features");
+        const variables = url.searchParams.get("variables");
         if (!features) return;
+        const source = match[2] === "Likes" ? "heart" : "bookmark";
         const patch = {
-          likesQueryId: m[1],
-          likesFeatures: features,
-          likesCapturedAt: Date.now(),
+          [`${source}QueryId`]: match[1],
+          [`${source}Features`]: features,
+          [`${source}CapturedAt`]: Date.now(),
         };
         if (variables) {
           try {
-            const v = JSON.parse(variables);
-            if (v.userId) patch.likesUserId = String(v.userId);
+            const parsed = JSON.parse(variables);
+            if (parsed.userId) patch.heartUserId = String(parsed.userId);
           } catch {
-            // ignore
+            // Ignore malformed variables.
           }
         }
         chrome.storage.local.set(patch);
       } catch {
-        // ignore
+        // Ignore malformed URLs.
       }
     },
-    { urls: ["https://x.com/i/api/graphql/*/Likes*"] },
+    {
+      urls: [
+        "https://x.com/i/api/graphql/*/Likes*",
+        "https://x.com/i/api/graphql/*/Bookmarks*",
+      ],
+    },
   );
 }
 
-export async function getCapturedConfig() {
-  const data = await chrome.storage.local.get([
-    "likesQueryId",
-    "likesFeatures",
-    "likesUserId",
-  ]);
-  if (!data.likesQueryId || !data.likesFeatures || !data.likesUserId) {
-    return null;
-  }
+export async function getCapturedConfig(source) {
+  const prefix = source === "heart" ? "heart" : "bookmark";
+  const keys = [`${prefix}QueryId`, `${prefix}Features`, "heartUserId"];
+  const data = await chrome.storage.local.get(keys);
+  const queryId = data[`${prefix}QueryId`];
+  const features = data[`${prefix}Features`];
+  if (!queryId || !features || (source === "heart" && !data.heartUserId)) return null;
   return {
-    queryId: data.likesQueryId,
-    features: data.likesFeatures,
-    userId: data.likesUserId,
+    queryId,
+    features,
+    operation: source === "heart" ? "Likes" : "Bookmarks",
+    ...(source === "heart" ? { userId: data.heartUserId } : {}),
   };
 }
 
-export async function captureNow({ timeoutMs = 25000 } = {}) {
-  const existing = await getCapturedConfig();
+export async function captureConfig(source, { timeoutMs = 25000 } = {}) {
+  const existing = await getCapturedConfig(source);
   if (existing) return existing;
 
-  const viewer = await fetchViewer();
-  if (!viewer?.userId || !viewer?.screenName) {
-    throw new Error(
-      "Couldn't detect your X account. Sign in at x.com, open your profile Likes once, then Sync again.",
-    );
+  let target = "https://x.com/i/bookmarks";
+  if (source === "heart") {
+    const viewer = await fetchViewer();
+    if (!viewer) {
+      throw new Error("Could not detect your X account. Open your profile Hearts tab once, then retry.");
+    }
+    await chrome.storage.local.set({ heartUserId: String(viewer.userId) });
+    target = `https://x.com/${viewer.screenName}/likes`;
   }
 
-  await chrome.storage.local.set({ likesUserId: String(viewer.userId) });
-
-  const before = Date.now();
-  const tab = await chrome.tabs.create({
-    url: `https://x.com/${viewer.screenName}/likes`,
-    active: false,
-  });
-
+  const tab = await chrome.tabs.create({ url: target, active: false });
   try {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       await sleep(400);
-      const cfg = await getCapturedConfig();
-      if (cfg?.queryId && cfg?.features) return cfg;
-
-      const { likesCapturedAt } = await chrome.storage.local.get([
-        "likesCapturedAt",
-      ]);
-      if (likesCapturedAt && likesCapturedAt >= before) {
-        const again = await getCapturedConfig();
-        if (again) return again;
-      }
+      const config = await getCapturedConfig(source);
+      if (config) return config;
     }
-    throw new Error(
-      "Couldn't capture X Likes API config. Open x.com/YOUR_HANDLE/likes in a tab, wait for likes to load, then Sync again.",
-    );
+    const label = source === "heart" ? "Hearts" : "Bookmarks";
+    throw new Error(`Could not capture X ${label}. Open that page in X, let it load, then retry.`);
   } finally {
-    if (tab.id != null) {
-      try {
-        await chrome.tabs.remove(tab.id);
-      } catch {
-        // ignore
-      }
-    }
+    if (tab.id != null) chrome.tabs.remove(tab.id).catch(() => {});
   }
 }
 
 async function fetchViewer() {
   try {
-    const ct0 = await chrome.cookies.get({ url: "https://x.com", name: "ct0" });
-    if (!ct0?.value) return null;
-    const res = await fetch(
-      "https://api.x.com/1.1/account/verify_credentials.json",
-      {
-        credentials: "include",
-        headers: {
-          authorization: `Bearer ${BEARER}`,
-          "x-csrf-token": ct0.value,
-          "x-twitter-auth-type": "OAuth2Session",
-          "x-twitter-active-user": "yes",
-        },
+    const csrf = await chrome.cookies.get({ url: "https://x.com", name: "ct0" });
+    if (!csrf?.value) return null;
+    const response = await fetch("https://api.x.com/1.1/account/verify_credentials.json", {
+      credentials: "include",
+      headers: {
+        authorization: `Bearer ${BEARER}`,
+        "x-csrf-token": csrf.value,
+        "x-twitter-auth-type": "OAuth2Session",
+        "x-twitter-active-user": "yes",
       },
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data?.id_str) return null;
-    return { userId: data.id_str, screenName: data.screen_name };
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data?.id_str ? { userId: data.id_str, screenName: data.screen_name } : null;
   } catch {
     return null;
   }
 }
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

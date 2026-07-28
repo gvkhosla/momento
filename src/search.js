@@ -1,140 +1,129 @@
-import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { loadItems } from "./store.js";
 
-export function searchVault(home, query) {
-  const dir = join(home, "by-id");
-  if (!existsSync(dir)) return [];
+const STOP_WORDS = new Set([
+  "a",
+  "about",
+  "an",
+  "and",
+  "by",
+  "for",
+  "from",
+  "i",
+  "in",
+  "is",
+  "it",
+  "me",
+  "my",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "this",
+  "to",
+  "tweet",
+  "tweets",
+  "was",
+  "what",
+  "with",
+]);
 
-  if (hasBin("rg")) {
-    return searchWithRg(dir, query);
-  }
-  return searchNaive(dir, query);
+export function searchVault(home, query, options = {}) {
+  return searchItems(loadItems(home), query, options);
+}
+
+export function searchItems(items, query, options = {}) {
+  const source = options.source && options.source !== "all" ? options.source : null;
+  const limit = clamp(Number(options.limit || 100), 1, 500);
+  const offset = Math.max(0, Number(options.offset || 0));
+  const normalizedQuery = normalize(query || "");
+  const tokens = tokenize(normalizedQuery);
+
+  const candidates = items.filter(
+    (item) => !source || item.sources?.includes(source),
+  );
+
+  const scored = candidates
+    .map((item) => ({ item, score: scoreItem(item, normalizedQuery, tokens) }))
+    .filter(({ score }) => !normalizedQuery || score > 0)
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return new Date(b.item.savedAt || b.item.postedAt) - new Date(a.item.savedAt || a.item.postedAt);
+    });
+
+  return scored.slice(offset, offset + limit).map(({ item, score }) => ({
+    ...item,
+    score,
+  }));
 }
 
 export function statsVault(home) {
-  const dir = join(home, "by-id");
-  if (!existsSync(dir)) return { count: 0 };
-  const files = readdirSync(dir).filter((f) => f.endsWith(".md"));
-  const dates = files
-    .map((f) => f.slice(0, 10))
-    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-    .sort();
-  return {
-    count: files.length,
-    oldest: dates[0] || null,
-    newest: dates[dates.length - 1] || null,
-  };
-}
-
-function searchWithRg(dir, query) {
-  let out = "";
-  try {
-    out = execFileSync(
-      "rg",
-      [
-        "-i",
-        "--no-heading",
-        "--with-filename",
-        "--line-number",
-        "--max-count",
-        "3",
-        "-g",
-        "*.md",
-        query,
-        dir,
-      ],
-      { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 },
-    );
-  } catch (err) {
-    // rg exits 1 on no matches
-    if (err?.status === 1) return [];
-    throw err;
-  }
-
-  /** @type {Map<string, {file:string, lines:string[]}>} */
-  const byFile = new Map();
-  for (const line of out.split("\n")) {
-    if (!line) continue;
-    const m = line.match(/^(.*?):(\d+):(.*)$/);
-    if (!m) continue;
-    const [, file, , text] = m;
-    if (!byFile.has(file)) byFile.set(file, { file, lines: [] });
-    const entry = byFile.get(file);
-    if (entry.lines.length < 2) entry.lines.push(text.trim());
-  }
-
-  return [...byFile.values()].map((e) => hitFromFile(e.file, e.lines.join(" · ")));
-}
-
-function searchNaive(dir, query) {
-  const q = query.toLowerCase();
-  const hits = [];
-  for (const name of readdirSync(dir)) {
-    if (!name.endsWith(".md")) continue;
-    const file = join(dir, name);
-    const body = readFileSync(file, "utf8");
-    if (!body.toLowerCase().includes(q)) continue;
-    const idx = body.toLowerCase().indexOf(q);
-    const start = Math.max(0, idx - 40);
-    const snippet = body
-      .slice(start, start + 120)
-      .replace(/\s+/g, " ")
-      .trim();
-    hits.push(hitFromFile(file, snippet));
-    if (hits.length >= 50) break;
-  }
-  return hits;
-}
-
-function hitFromFile(file, snippet) {
-  let body = "";
-  try {
-    body = readFileSync(file, "utf8");
-  } catch {
-    body = "";
-  }
-  const author = matchFm(body, "author") || "";
-  const url = matchFm(body, "url") || "";
-  const date = matchFm(body, "date") || "";
-  const textLine =
-    body
-      .split("\n")
-      .map((l) => l.trim())
-      .find((l) => l && !l.startsWith("---") && !l.includes(": ") && !l.startsWith("#")) || "";
-
-  const title = [date.slice(0, 10), author, truncate(textLine, 72)]
+  const items = loadItems(home);
+  const dates = items
+    .map((item) => item.postedAt || item.savedAt)
     .filter(Boolean)
-    .join(" · ");
-
-  return {
-    file,
-    url,
-    title,
-    snippet: truncate(snippet || textLine, 140),
-  };
-}
-
-function matchFm(body, key) {
-  const m = body.match(new RegExp(`^${key}:\\s*(.+)$`, "m"));
-  if (!m) return null;
-  const v = m[1].trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-    try {
-      return JSON.parse(v);
-    } catch {
-      return v.slice(1, -1);
+    .sort();
+  const counts = { all: items.length, heart: 0, bookmark: 0, shared: 0 };
+  for (const item of items) {
+    for (const source of item.sources || []) {
+      if (source in counts) counts[source] += 1;
     }
   }
-  return v;
+
+  return {
+    count: items.length,
+    counts,
+    oldest: dates[0]?.slice(0, 10) || null,
+    newest: dates.at(-1)?.slice(0, 10) || null,
+  };
 }
 
-function truncate(s, n) {
-  const t = (s || "").replace(/\s+/g, " ").trim();
-  return t.length > n ? t.slice(0, n - 1) + "…" : t;
+function scoreItem(item, phrase, tokens) {
+  if (!phrase) return 1;
+
+  const text = normalize(item.text || "");
+  const author = normalize(
+    `${item.author?.displayName || ""} ${item.author?.handle || ""}`,
+  );
+  const links = normalize(
+    (item.links || [])
+      .map((entry) => `${entry.title || ""} ${entry.expandedUrl || entry.url || ""}`)
+      .join(" "),
+  );
+  const full = `${author} ${text} ${links}`;
+  let score = 0;
+
+  if (text.includes(phrase)) score += 20;
+  if (author.includes(phrase)) score += 16;
+  if (links.includes(phrase)) score += 10;
+
+  for (const token of tokens) {
+    if (author.includes(token)) score += 7;
+    if (text.includes(token)) score += 5;
+    if (links.includes(token)) score += 3;
+    if (full.split(/\s+/).some((word) => word.startsWith(token))) score += 1;
+  }
+
+  if (tokens.length > 1 && tokens.every((token) => full.includes(token))) score += 8;
+  return score;
 }
 
-function hasBin(name) {
-  const r = spawnSync(name, ["--version"], { stdio: "ignore" });
-  return r.status === 0 || r.status === null;
+function tokenize(value) {
+  const useful = value
+    .split(/[^a-z0-9_@]+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length > 1 && !STOP_WORDS.has(token));
+  return useful.length > 0 ? [...new Set(useful)] : value ? [value] : [];
+}
+
+function normalize(value) {
+  return String(value)
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
 }

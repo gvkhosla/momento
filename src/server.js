@@ -1,216 +1,252 @@
+import { randomBytes } from "node:crypto";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
+import { extname, join, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
+import { captureUrl } from "./capture.js";
+import { searchItems, statsVault } from "./search.js";
 import {
-  appendFileSync,
-  existsSync,
-  readFileSync,
-  readdirSync,
-  writeFileSync,
-  mkdirSync,
-  unlinkSync,
-} from "node:fs";
-import { join } from "node:path";
-import { toMarkdown, slugName } from "./format.js";
+  countSources,
+  getKnownIds,
+  ingestItems,
+  loadItems,
+} from "./store.js";
 
-const MAX_BODY = 12 * 1024 * 1024; // 12mb
+const MAX_BODY = 12 * 1024 * 1024;
+const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
+const MIME = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".webmanifest": "application/manifest+json",
+};
 
-export function createServer({ home }) {
-  mkdirSync(join(home, "by-id"), { recursive: true });
+export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) {
+  let phoneToken = "";
 
   return createHttpServer(async (req, res) => {
-    // CORS for the chrome extension
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "content-type");
-
-    if (req.method === "OPTIONS") {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
+    setCors(res);
+    if (req.method === "OPTIONS") return empty(res, 204);
 
     try {
-      const url = new URL(req.url || "/", "http://127.0.0.1");
+      const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+      const pathname = url.pathname;
 
-      if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/health")) {
-        const known = loadKnownIds(home);
+      if (req.method === "POST" && pathname === "/api/phone-session") {
+        if (!isLocalRequest(req) || isTunnelRequest(req)) {
+          return json(res, 403, { error: "local_only" });
+        }
+        phoneToken = randomBytes(24).toString("base64url");
+        return json(res, 200, { token: phoneToken });
+      }
+
+      if (req.method === "GET" && pathname === "/" && url.searchParams.get("token")) {
+        const supplied = url.searchParams.get("token");
+        if (phoneToken && supplied === phoneToken) {
+          res.writeHead(303, {
+            location: "/",
+            "set-cookie": `momento_phone=${phoneToken}; Path=/; HttpOnly; Secure; SameSite=Lax`,
+          });
+          return res.end();
+        }
+      }
+
+      if (pathname.startsWith("/api/") && !isAuthorized(req, url, token, phoneToken)) {
+        return json(res, 401, { error: "unauthorized" });
+      }
+
+      if (req.method === "GET" && pathname === "/api/health") {
+        const items = loadItems(home);
         return json(res, 200, {
           ok: true,
           home,
-          total: known.size,
-          endpoints: ["GET /health", "GET /known-ids", "GET /search?q=", "POST /ingest"],
+          total: items.length,
+          counts: countSources(items),
+          protected: Boolean(token || (phoneToken && isTunnelRequest(req))),
         });
       }
 
-      if (req.method === "GET" && url.pathname === "/known-ids") {
-        const ids = loadKnownIds(home);
-        return json(res, 200, { ids: [...ids] });
+      if (req.method === "GET" && pathname === "/api/items") {
+        const items = loadItems(home);
+        const q = url.searchParams.get("q") || "";
+        const source = url.searchParams.get("source") || "all";
+        const limit = url.searchParams.get("limit") || "100";
+        const offset = url.searchParams.get("offset") || "0";
+        const results = searchItems(items, q, { source, limit, offset });
+        return json(res, 200, {
+          q,
+          source,
+          results,
+          total: results.length,
+          counts: countSources(items),
+        });
       }
 
-      if (req.method === "GET" && url.pathname === "/search") {
-        const q = (url.searchParams.get("q") || "").trim();
-        if (!q) return json(res, 400, { error: "missing q" });
-        const { searchVault } = await import("./search.js");
-        return json(res, 200, { q, results: searchVault(home, q) });
+      if (req.method === "GET" && pathname === "/api/stats") {
+        return json(res, 200, statsVault(home));
       }
 
-      if (req.method === "POST" && url.pathname === "/ingest") {
-        const body = await readBody(req);
-        const payload = JSON.parse(body || "{}");
-        const likes = Array.isArray(payload.likes) ? payload.likes : [];
-        const result = ingest(home, likes);
+      if (req.method === "GET" && pathname === "/api/known-ids") {
+        const source = url.searchParams.get("source");
+        return json(res, 200, { ids: getKnownIds(home, source) });
+      }
+
+      if (req.method === "POST" && pathname === "/api/ingest") {
+        const payload = await readPayload(req);
+        const items = Array.isArray(payload.items)
+          ? payload.items
+          : Array.isArray(payload.likes)
+            ? payload.likes
+            : Array.isArray(payload.bookmarks)
+              ? payload.bookmarks
+              : [];
+        return json(res, 200, ingestItems(home, items));
+      }
+
+      if (req.method === "POST" && pathname === "/api/capture") {
+        const payload = await readPayload(req);
+        const result = await captureUrl(
+          home,
+          payload.url || payload.text,
+          payload.source || "bookmark",
+        );
         return json(res, 200, result);
       }
 
-      json(res, 404, { error: "not_found" });
-    } catch (err) {
-      json(res, 500, { error: String(err?.message ?? err) });
+      if ((req.method === "POST" || req.method === "GET") && pathname === "/share") {
+        if (!isAuthorized(req, url, token, phoneToken)) {
+          return json(res, 401, { error: "unauthorized" });
+        }
+        const payload =
+          req.method === "POST"
+            ? await readPayload(req)
+            : Object.fromEntries(url.searchParams.entries());
+        await captureUrl(
+          home,
+          payload.url || payload.text || payload.title,
+          payload.source || "bookmark",
+        );
+        res.writeHead(303, { location: "/?captured=1" });
+        return res.end();
+      }
+
+      // Backward compatibility for the v0.1 extension.
+      if (req.method === "GET" && pathname === "/health") {
+        const items = loadItems(home);
+        return json(res, 200, { ok: true, home, total: items.length, counts: countSources(items) });
+      }
+      if (req.method === "GET" && pathname === "/known-ids") {
+        return json(res, 200, { ids: getKnownIds(home, url.searchParams.get("source")) });
+      }
+      if (req.method === "POST" && pathname === "/ingest") {
+        const payload = await readPayload(req);
+        return json(res, 200, ingestItems(home, payload.likes || payload.items || []));
+      }
+
+      if (req.method === "GET" || req.method === "HEAD") {
+        return serveStatic(req, res, pathname);
+      }
+
+      return json(res, 404, { error: "not_found" });
+    } catch (error) {
+      const message = String(error?.message || error);
+      const status = /valid x\.com|Paste/.test(message) ? 400 : 500;
+      return json(res, status, { error: message });
     }
   });
 }
 
-export function ingest(home, likes) {
-  let inserted = 0;
-  let updated = 0;
-  let skipped = 0;
-  const known = loadKnownIds(home);
-  const paths = loadIdPaths(home);
-  const jsonlPath = join(home, "likes.jsonl");
-  const now = new Date().toISOString();
+function serveStatic(req, res, pathname) {
+  const requested = pathname === "/" ? "index.html" : pathname.replace(/^\//, "");
+  const safe = normalize(requested).replace(/^(\.\.[/\\])+/, "");
+  let path = join(PUBLIC_DIR, safe);
 
-  for (const like of likes) {
-    if (!like?.id || !like?.text) {
-      skipped += 1;
-      continue;
-    }
+  if (!path.startsWith(PUBLIC_DIR)) return json(res, 403, { error: "forbidden" });
+  if (!existsSync(path) || statSync(path).isDirectory()) path = join(PUBLIC_DIR, "index.html");
+  if (!existsSync(path)) return json(res, 404, { error: "not_found" });
 
-    const id = String(like.id);
-    const record = {
-      ...like,
-      id,
-      liked_at: like.liked_at || now,
-      synced_at: now,
-    };
-
-    const preferred = join(home, "by-id", `${slugName(record)}.md`);
-    const existingPath = paths.get(id);
-    const existed = known.has(id) || Boolean(existingPath && existsSync(existingPath));
-
-    // Drop stale slug file if handle/date changed
-    if (existingPath && existingPath !== preferred && existsSync(existingPath)) {
-      try {
-        unlinkSync(existingPath);
-      } catch {
-        // ignore
-      }
-    }
-
-    writeFileSync(preferred, toMarkdown(record), "utf8");
-    paths.set(id, preferred);
-
-    if (!existed) {
-      appendFileSync(jsonlPath, JSON.stringify(record) + "\n", "utf8");
-      inserted += 1;
-      known.add(id);
-    } else {
-      updated += 1;
-      known.add(id);
-    }
-  }
-
-  writeFileSync(join(home, "README.md"), vaultReadme(known.size), "utf8");
-  writeKnownIds(home, known);
-
-  return { seen: likes.length, inserted, updated, skipped, total: known.size };
+  const stat = statSync(path);
+  res.writeHead(200, {
+    "content-type": MIME[extname(path)] || "application/octet-stream",
+    "content-length": stat.size,
+    "cache-control": path.endsWith("index.html") ? "no-cache" : "public, max-age=3600",
+  });
+  if (req.method === "HEAD") return res.end();
+  createReadStream(path).pipe(res);
 }
 
-function loadIdPaths(home) {
-  const dir = join(home, "by-id");
-  const map = new Map();
-  if (!existsSync(dir)) return map;
-  for (const name of readdirSync(dir)) {
-    if (!name.endsWith(".md")) continue;
-    const id = name.replace(/\.md$/, "").split("-").pop();
-    if (id) map.set(id, join(dir, name));
-  }
-  return map;
+function isAuthorized(req, url, configuredToken, phoneToken) {
+  const required = configuredToken || (isTunnelRequest(req) ? phoneToken : "");
+  if (!required) return true;
+  const header = req.headers.authorization?.replace(/^Bearer\s+/i, "");
+  const cookie = parseCookies(req.headers.cookie || "").momento_phone;
+  return header === required || url.searchParams.get("token") === required || cookie === required;
 }
 
-function loadKnownIds(home) {
-  const p = join(home, ".known-ids.json");
-  if (!existsSync(p)) {
-    // bootstrap from by-id filenames
-    const dir = join(home, "by-id");
-    if (!existsSync(dir)) return new Set();
-    try {
-      const files = readdirSync(dir);
-      const ids = files
-        .filter((f) => f.endsWith(".md"))
-        .map((f) => f.replace(/\.md$/, "").split("-").pop())
-        .filter(Boolean);
-      return new Set(ids);
-    } catch {
-      return new Set();
-    }
-  }
-  try {
-    const data = JSON.parse(readFileSync(p, "utf8"));
-    return new Set(Array.isArray(data) ? data : []);
-  } catch {
-    return new Set();
-  }
+function isTunnelRequest(req) {
+  return Boolean(req.headers["cf-connecting-ip"] || req.headers["cf-ray"]);
 }
 
-function writeKnownIds(home, known) {
-  writeFileSync(
-    join(home, ".known-ids.json"),
-    JSON.stringify([...known], null, 0),
-    "utf8",
+function isLocalRequest(req) {
+  const address = req.socket.remoteAddress || "";
+  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+
+function parseCookies(header) {
+  return Object.fromEntries(
+    header
+      .split(";")
+      .map((part) => part.trim().split(/=(.*)/s))
+      .filter(([key]) => key),
   );
 }
 
-function vaultReadme(count) {
-  return `# momento vault
-
-${count} likes saved as markdown.
-
-## Search
-
-\`\`\`bash
-momento search "pricing"
-rg -i "pricing" by-id/
-\`\`\`
-
-## Layout
-
-- \`by-id/*.md\` — one file per like (agent-friendly)
-- \`likes.jsonl\` — append-only JSON log
-- \`.known-ids.json\` — sync cursor helper
-
-Your agent can just grep this folder.
-`;
+function setCors(res) {
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+  res.setHeader("access-control-allow-headers", "content-type, authorization");
 }
 
-function json(res, status, obj) {
-  const body = JSON.stringify(obj);
+function json(res, status, object) {
+  const body = JSON.stringify(object);
   res.writeHead(status, {
-    "content-type": "application/json",
+    "content-type": "application/json; charset=utf-8",
     "content-length": Buffer.byteLength(body),
   });
   res.end(body);
+}
+
+function empty(res, status) {
+  res.writeHead(status);
+  res.end();
+}
+
+async function readPayload(req) {
+  const body = await readBody(req);
+  const contentType = req.headers["content-type"] || "";
+  if (contentType.includes("application/json")) return JSON.parse(body || "{}");
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    return Object.fromEntries(new URLSearchParams(body).entries());
+  }
+  return { text: body };
 }
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
-    req.on("data", (c) => {
-      size += c.length;
+    req.on("data", (chunk) => {
+      size += chunk.length;
       if (size > MAX_BODY) {
         reject(new Error("body too large"));
         req.destroy();
         return;
       }
-      chunks.push(c);
+      chunks.push(chunk);
     });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     req.on("error", reject);

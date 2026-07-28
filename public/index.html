@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en" class="antialiased">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4f0e8" />
+    <meta name="description" content="Remember everything you heart, bookmark, or share from X." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon-192.png" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="preload" href="https://rsms.me/inter/font-files/InterVariable.woff2?v=4.1" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/app.css?v=2.2" />
+    <title>Momento — remember what you saved</title>
+  </head>
+  <body>
+    <div class="app-shell" id="app">
+      <header class="topbar">
+        <a class="wordmark" href="/" aria-label="Momento home">momento<span aria-hidden="true">.</span></a>
+        <div class="topbar-actions">
+          <p class="sync-status" id="sync-status" aria-live="polite"><span class="status-dot"></span>Connecting</p>
+          <button class="add-button" id="open-capture" type="button">Add a link</button>
+        </div>
+      </header>
+
+      <main class="page">
+        <section class="intro" aria-labelledby="page-title">
+          <p class="eyebrow">Your external memory for X</p>
+          <h1 id="page-title">What do you remember?</h1>
+          <p class="intro-copy">Search the things you hearted, bookmarked, or sent here before the timeline swallowed them.</p>
+
+          <form class="search-form" id="search-form" role="search">
+            <label class="sr-only" for="search">Search your archive</label>
+            <input
+              id="search"
+              name="q"
+              type="search"
+              inputmode="search"
+              autocomplete="off"
+              placeholder="A phrase, person, or half-remembered idea…"
+            />
+            <kbd class="search-hint">⌘ K</kbd>
+          </form>
+        </section>
+
+        <nav class="source-tabs" aria-label="Filter archive">
+          <button class="source-tab is-active" type="button" data-source="all" aria-pressed="true">All <span id="count-all">0</span></button>
+          <button class="source-tab" type="button" data-source="bookmark" aria-pressed="false">Bookmarks <span id="count-bookmark">0</span></button>
+          <button class="source-tab" type="button" data-source="heart" aria-pressed="false">Hearts <span id="count-heart">0</span></button>
+          <button class="source-tab" type="button" data-source="shared" aria-pressed="false">Shared <span id="count-shared">0</span></button>
+        </nav>
+
+        <div class="content-grid">
+          <section class="results-section" aria-labelledby="results-title">
+            <div class="results-heading">
+              <h2 id="results-title">Recently remembered</h2>
+              <p id="result-count" class="result-count" aria-live="polite"></p>
+            </div>
+            <div id="results" class="results-list"></div>
+
+            <div class="empty-state" id="empty-state" hidden>
+              <p class="empty-kicker">Nothing surfaced</p>
+              <h2>Try the part you actually remember.</h2>
+              <p>Use a person, phrase, or rough idea. Momento ignores filler words like “that tweet about”.</p>
+              <button class="secondary-button" id="clear-search" type="button">Show everything</button>
+            </div>
+
+            <div class="empty-state" id="onboarding-state" hidden>
+              <p class="empty-kicker">Your wall is empty</p>
+              <h2>Bring back what X forgot.</h2>
+              <p>Sync Hearts and Bookmarks from the Chrome extension, or add a tweet from your phone now.</p>
+              <button class="secondary-button" id="onboarding-add" type="button">Add your first link</button>
+            </div>
+          </section>
+
+          <aside class="archive-aside" aria-label="Archive summary">
+            <div class="aside-block">
+              <p class="aside-label">Archive</p>
+              <p class="archive-total"><span id="archive-total">0</span> memories</p>
+              <dl class="source-summary">
+                <div><dt><span class="source-mark bookmark-mark"></span>Bookmarks</dt><dd id="aside-bookmarks">0</dd></div>
+                <div><dt><span class="source-mark heart-mark"></span>Hearts</dt><dd id="aside-hearts">0</dd></div>
+                <div><dt><span class="source-mark shared-mark"></span>Shared</dt><dd id="aside-shared">0</dd></div>
+              </dl>
+            </div>
+
+            <div class="aside-block aside-note">
+              <p class="aside-label">On your phone</p>
+              <p>Install Momento, then share X links straight into your archive.</p>
+              <button class="text-button" id="install-app" type="button" hidden>Install this app</button>
+            </div>
+
+            <blockquote>
+              <p>Memory can change the shape of a room.</p>
+              <cite>A small wink to <i>Memento</i></cite>
+            </blockquote>
+          </aside>
+        </div>
+      </main>
+    </div>
+
+    <dialog class="capture-dialog" id="capture-dialog">
+      <form method="dialog" class="dialog-card" id="capture-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Write it down</p>
+            <h2>Save from X</h2>
+          </div>
+          <button class="close-button" id="close-capture" type="button" aria-label="Close">Close</button>
+        </div>
+
+        <div class="form-field">
+          <label for="capture-url">Tweet URL</label>
+          <div class="url-control">
+            <input id="capture-url" name="url" type="url" inputmode="url" autocomplete="url" placeholder="https://x.com/…/status/…" required />
+            <button class="paste-button" id="paste-url" type="button">Paste</button>
+          </div>
+        </div>
+
+        <fieldset>
+          <legend>Remember it as</legend>
+          <div class="source-options">
+            <label><input type="radio" name="source" value="bookmark" checked /><span><b>Bookmark</b><small>Something to return to.</small></span></label>
+            <label><input type="radio" name="source" value="heart" /><span><b>Heart</b><small>Something you appreciated.</small></span></label>
+          </div>
+        </fieldset>
+
+        <p class="form-error" id="capture-error" role="alert"></p>
+        <button class="save-button" id="save-capture" value="default" type="submit">Save to Momento</button>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+    <script type="module" src="/app.js?v=2.2"></script>
+  </body>
+</html>

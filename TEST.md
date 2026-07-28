@@ -1,47 +1,49 @@
-# Test momento (5 min)
+# Test Momento v0.2
 
-## 1. Server (already can be running)
+## Core app
 
 ```bash
+cd ~/momento
+npm link
+momento seed
 momento serve
 ```
 
-Expect: `momento listening on http://127.0.0.1:4177`
+Open http://localhost:4177 and verify:
 
-## 2. Optional: demo search without X
+- Four demo memories appear
+- Counts: 4 unique, 2 Bookmarks, 2 Hearts, 1 Shared
+- Search `that tweet about pricing` returns Paul Graham and Lenny
+- Filters preserve Heart versus Bookmark
+- Add a link opens and closes correctly
+
+## Extension sync
+
+1. `chrome://extensions` → Developer mode
+2. Remove/reload the old Momento extension
+3. Load unpacked: `/Users/geetkhosla/momento/extension`
+4. Stay signed in at x.com
+5. Open Momento → choose Bookmarks + Hearts → Sync selected
+
+The first real batch automatically removes demo memories.
+
+If capture fails, visit these pages once and retry:
+
+- `https://x.com/i/bookmarks`
+- `https://x.com/YOUR_HANDLE/likes`
+
+## Phone
 
 ```bash
-momento seed
-momento search pricing
-momento stats
-momento open
+momento phone
 ```
 
-## 3. Real X likes
+Open the printed HTTPS URL on your phone. Test search, source filters, Add a link, and Add to Home Screen.
 
-1. Chrome → `chrome://extensions` → Developer mode ON
-2. **Load unpacked** → select:
-
-   `/Users/geetkhosla/momento/extension`
-
-3. Stay signed in at [x.com](https://x.com)
-4. Click the **momento** extension icon → **Sync likes**
-5. Wait for “Done…”
-
-If capture fails: open `https://x.com/YOUR_HANDLE/likes`, let it load, sync again.
-
-## 4. Search
+## Automated checks
 
 ```bash
-momento search "a word you remember"
-momento path          # ~/momento-vault
-rg -i "word" "$(momento path)/by-id"
+npm test
+npm run check
+curl http://127.0.0.1:4177/api/health
 ```
-
-## 5. Agent
-
-```text
-search my momento tweets about pricing
-```
-
-(with `momento/skill/SKILL.md` installed, or just tell the agent the vault path)

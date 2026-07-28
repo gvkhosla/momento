@@ -2,68 +2,57 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>momento</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Momento</title>
     <style>
-      :root {
-        color-scheme: dark;
-        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-      }
-      body {
-        margin: 0;
-        width: 280px;
-        padding: 14px;
-        background: #0b0b0c;
-        color: #f2f2f3;
-      }
-      h1 {
-        margin: 0 0 4px;
-        font-size: 15px;
-        font-weight: 600;
-        letter-spacing: -0.02em;
-      }
-      p {
-        margin: 0 0 12px;
-        font-size: 12px;
-        line-height: 1.4;
-        color: #9a9aa0;
-      }
-      button {
-        width: 100%;
-        border: 0;
-        border-radius: 8px;
-        padding: 10px 12px;
-        background: #f2f2f3;
-        color: #0b0b0c;
-        font: inherit;
-        font-size: 13px;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      button:disabled {
-        opacity: 0.5;
-        cursor: default;
-      }
-      #log {
-        margin-top: 12px;
-        min-height: 2.5em;
-        font-size: 11px;
-        line-height: 1.45;
-        color: #b8b8be;
-        white-space: pre-wrap;
-      }
-      .ok {
-        color: #7ddea2;
-      }
-      .err {
-        color: #ff8f8f;
-      }
+      :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif; }
+      * { box-sizing: border-box; }
+      body { width: 320px; margin: 0; padding: 16px; background: #f4f0e8; color: #171716; }
+      header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+      h1 { margin: 0; font-family: ui-monospace, Menlo, monospace; font-size: 17px; font-weight: 700; letter-spacing: -.04em; }
+      h1 span { color: #c84f58; }
+      #status { display: flex; align-items: center; gap: 6px; margin: 0; color: #706e68; font-size: 12px; }
+      .dot { width: 6px; height: 6px; border-radius: 50%; background: #b08b3e; }
+      .online .dot { background: #4e8b63; }
+      .offline .dot { background: #c84f58; }
+      .intro { margin: 14px 0 0; color: #706e68; font-size: 13px; line-height: 1.5; }
+      fieldset { display: grid; gap: 1px; margin: 16px 0 0; padding: 0; overflow: hidden; border: 1px solid rgb(23 23 22 / 12%); border-radius: 9px; background: rgb(23 23 22 / 10%); }
+      legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
+      label { display: flex; align-items: center; gap: 10px; padding: 11px; background: #fffefa; cursor: pointer; }
+      label input { width: 17px; height: 17px; margin: 0; accent-color: #171716; }
+      .option { display: flex; min-width: 0; flex: 1; align-items: baseline; justify-content: space-between; gap: 10px; }
+      .option b { font-size: 13px; font-weight: 620; }
+      .option span { color: #9c9991; font-size: 12px; font-variant-numeric: tabular-nums; }
+      button { width: 100%; min-height: 36px; border: 0; border-radius: 8px; cursor: pointer; font: inherit; font-size: 13px; font-weight: 620; }
+      #sync { margin-top: 12px; background: #171716; color: white; }
+      #open-app { margin-top: 8px; background: rgb(23 23 22 / 7%); color: #171716; }
+      button:disabled { cursor: not-allowed; opacity: .5; }
+      button:focus-visible, input:focus-visible { outline: 2px solid #2463eb; outline-offset: 2px; }
+      #log { min-height: 36px; margin: 12px 0 0; color: #706e68; font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+      #log.ok { color: #3f7653; }
+      #log.err { color: #b74049; }
     </style>
   </head>
   <body>
-    <h1>momento</h1>
-    <p>Dump your X likes into local markdown your agent can search.</p>
-    <button id="sync" type="button">Sync likes</button>
-    <div id="log">Server: http://127.0.0.1:4177</div>
+    <header>
+      <h1>momento<span>.</span></h1>
+      <p id="status"><span class="dot"></span><span>Checking archive</span></p>
+    </header>
+    <p class="intro">Bring your X memory home. Sync both, or choose the timeline you want.</p>
+    <fieldset>
+      <legend>Sources to sync</legend>
+      <label>
+        <input id="bookmarks" type="checkbox" checked />
+        <span class="option"><b>Bookmarks</b><span id="bookmark-count">0 saved</span></span>
+      </label>
+      <label>
+        <input id="hearts" type="checkbox" checked />
+        <span class="option"><b>Hearts</b><span id="heart-count">0 saved</span></span>
+      </label>
+    </fieldset>
+    <button id="sync" type="button">Sync selected</button>
+    <button id="open-app" type="button">Open Momento</button>
+    <p id="log">Run `momento serve`, then sync.</p>
     <script type="module" src="popup.js"></script>
   </body>
 </html>

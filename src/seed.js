@@ -1,10 +1,12 @@
-/** Demo likes so search works before first real sync. */
-export const DEMO_LIKES = [
+/** Demo archive so search works before the first real sync. */
+export const DEMO_ITEMS = [
   {
     id: "1000000000000000001",
     text: "The best founders are relentlessly resourceful about pricing experiments.",
     url: "https://x.com/paulg/status/1000000000000000001",
     postedAt: "2025-03-12T14:22:00.000Z",
+    source: "bookmark",
+    demo: true,
     author: { handle: "paulg", displayName: "Paul Graham" },
   },
   {
@@ -12,6 +14,8 @@ export const DEMO_LIKES = [
     text: "Usage-based pricing only works when the meter is obvious to the buyer.",
     url: "https://x.com/lennysan/status/1000000000000000002",
     postedAt: "2025-06-01T10:00:00.000Z",
+    source: "heart",
+    demo: true,
     author: { handle: "lennysan", displayName: "Lenny Rachitsky" },
   },
   {
@@ -19,6 +23,8 @@ export const DEMO_LIKES = [
     text: "Local agents beat cloud dashboards when the job is finding something you saved once a year. Memory is a filing problem.",
     url: "https://x.com/geetkhosla/status/1000000000000000003",
     postedAt: "2026-07-27T09:00:00.000Z",
+    sources: ["heart", "bookmark"],
+    demo: true,
     author: { handle: "geetkhosla", displayName: "Geet Khosla" },
   },
   {
@@ -26,6 +32,8 @@ export const DEMO_LIKES = [
     text: "Ship the smallest thing that makes the tweet findable. Markdown files are underrated infrastructure.",
     url: "https://x.com/swyx/status/1000000000000000004",
     postedAt: "2025-11-02T16:40:00.000Z",
+    source: "shared",
+    demo: true,
     author: { handle: "swyx", displayName: "swyx" },
   },
 ];

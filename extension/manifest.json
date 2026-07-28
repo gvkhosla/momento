@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "momento",
-  "version": "0.1.0",
-  "description": "Sync your X likes into a local folder of markdown files.",
+  "version": "0.2.0",
+  "description": "Sync X Hearts and Bookmarks into your searchable Momento archive."
   "permissions": [
     "cookies",
     "webRequest",

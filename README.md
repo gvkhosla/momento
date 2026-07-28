@@ -1,66 +1,80 @@
 # momento
 
-> Your X likes, written down before you forget.
+> Remember everything you heart, bookmark, or share from X.
 
-![momento — polaroids on a wall. REMEMBER. the heart is not a filing system.](./assets/momento.png)
+![Momento — three polaroids: you liked this, don't trust X search, find it later.](./assets/momento.png)
 
 <p align="center"><sub>Like the film: you won't remember. Write it down.<br/>Not affiliated with <i>Memento</i> (2000) — just stealing the bit about external memory.</sub></p>
 
-You heart tweets as a bookmark system. Months later they're gone.
-Obsidian sync + X API + cron is overkill when you need this once in a while.
+Momento brings **X Hearts + Bookmarks** into one searchable archive without flattening the distinction. The same tweet can be both; it still appears once.
 
-**momento** dumps your likes into a local folder of markdown. Your agent (or `rg`) already knows how to search files.
+- Mobile-first web app
+- Chrome extension for bulk Hearts and Bookmarks sync
+- Add a tweet from your phone by URL or share target
+- Natural keyword recall: `that tweet about pricing`
+- Plain markdown mirror for Obsidian and local agents
+- Local-first: browser cookies never leave the extension
 
-```bash
-momento serve
-# load the Chrome extension → Sync likes
-momento search "react compiler"
-```
+## Quick start
 
-No database. No hosted app. No accounts. Likes stay on your machine.
-
-## Install
-
-Needs Node 20+ and a Chromium browser (Chrome/Arc/Brave/Edge).
+Requires Node 20+ and Chrome/Arc/Brave/Edge.
 
 ```bash
 git clone https://github.com/gvkhosla/momento.git
 cd momento
 npm link
+momento seed      # optional demo archive
 momento serve
 ```
 
-Leave that terminal running.
+Open [http://localhost:4177](http://localhost:4177).
 
-### Chrome extension
+## Sync X Hearts + Bookmarks
 
 1. Open `chrome://extensions`
 2. Enable **Developer mode**
-3. **Load unpacked** → select the `extension/` folder in this repo
-4. Stay signed in to [x.com](https://x.com)
-5. Click the **momento** extension icon → **Sync likes**
+3. **Load unpacked** → select `momento/extension`
+4. Stay signed in at [x.com](https://x.com)
+5. Open the Momento extension
+6. Select **Bookmarks**, **Hearts**, or both → **Sync selected**
 
-If capture fails: open `https://x.com/YOUR_HANDLE/likes`, let it load, hit Sync again.
+If X config capture fails, open your Hearts or Bookmarks page once, let it load, then retry.
 
-### Search
+## Use it on your phone
+
+Create a temporary secure URL to the archive running on your Mac:
 
 ```bash
-momento search "pricing"
+momento phone
+```
+
+Open the printed HTTPS URL on your phone. Keep the terminal open.
+
+From there you can:
+
+- Search your whole archive
+- Filter Bookmarks, Hearts, and Shared items
+- Add an X URL directly
+- Install Momento to your Home Screen
+- Share into Momento on browsers that support PWA share targets
+
+Your archive still lives at `~/momento-vault`; the tunnel only exposes the running app while the command is open.
+
+> For a permanent multi-user cloud product, Momento needs accounts and an encrypted sync backend. This release deliberately keeps your X session and archive local.
+
+## CLI recall
+
+```bash
+momento search "the thread about usage pricing"
+momento search "design systems" --source bookmark
 momento stats
-momento path          # default: ~/momento-vault
-momento open          # open vault in Finder
+momento path
+momento open
 ```
 
-Optional demo data (no X needed):
+## What is stored
 
-```bash
-momento seed
-momento search pricing
-```
-
-## What you get
-
-Each like becomes one markdown file in `~/momento-vault/by-id/` — a polaroid for your agent:
+Each unique tweet becomes one markdown file:
 
 ```markdown
 ---
@@ -69,42 +83,75 @@ url: https://x.com/paulg/status/1900123456789012345
 author: "@paulg"
 author_name: Paul Graham
 date: 2025-03-12T14:22:00.000Z
-liked_at: 2026-07-28T08:30:00.000Z
+saved_at: 2026-07-28T08:30:00.000Z
+sources: ["heart", "bookmark"]
+liked_at: 2026-07-27T20:10:00.000Z
+bookmarked_at: 2026-07-28T08:30:00.000Z
 ---
 
 The best founders are relentlessly resourceful.
 ```
 
-Also: `likes.jsonl` for bulk tooling.
+Archive layout:
 
-Point Obsidian at `~/momento-vault` if you want. Or don't — any agent that can read files works.
+```text
+~/momento-vault/
+├── items.json       # canonical merged archive
+├── README.md
+└── by-id/           # agent/Obsidian-friendly markdown
+```
+
+## Phone capture
+
+The PWA declares a Web Share Target. You can also paste a tweet URL into **Add a link** and choose whether to remember it as a Bookmark or Heart.
+
+For an iOS Shortcut, create a Share Sheet shortcut that:
+
+1. Receives **URLs** from the Share Sheet
+2. Uses **Get Contents of URL** on `https://YOUR_TUNNEL/api/capture?token=YOUR_PAIRING_TOKEN`
+3. Method: `POST`
+4. JSON body: `{ "url": "Shortcut Input", "source": "bookmark" }`
+
+Copy the tunnel host and pairing token from the URL printed by `momento phone`.
+
+The temporary `trycloudflare.com` URL and pairing token change each time. A permanent hosted version will remove that limitation.
 
 ## Agent skill
 
-Drop [`skill/SKILL.md`](./skill/SKILL.md) into your agent skills dir. Then ask:
+Drop [`skill/SKILL.md`](./skill/SKILL.md) into your agent skills directory. Then ask:
 
-> find that tweet I liked about usage-based pricing
+> Find the tweet I bookmarked about usage-based pricing.
 
-## How sync works
+The agent uses `momento search` or reads `~/momento-vault/by-id`.
 
-1. Extension sniffs X's live `Likes` GraphQL config from your session
-2. Paginates likes with your browser cookies (no X developer account)
-3. POSTs batches to `http://127.0.0.1:4177`
-4. Server writes markdown. Idempotent on tweet id.
+## Commands
 
-## Config
+| Command | Job |
+|---|---|
+| `momento serve` | Run the PWA and local sync API |
+| `momento phone` | Create a secure temporary phone URL |
+| `momento search <query>` | Search the archive |
+| `momento stats` | Count unique items and sources |
+| `momento seed` | Add four demo memories |
+| `momento clear-demo` | Remove demo memories |
+| `momento path` | Print the vault path |
+| `momento open` | Open the vault |
 
-| Env / flag | Default | Meaning |
-|---|---|---|
-| `MOMENTO_HOME` / `--home` | `~/momento-vault` | Where files go |
-| `MOMENTO_PORT` / `--port` | `4177` | Local server port |
+## Privacy and constraints
 
-## Not this
+- X cookies remain inside the browser extension
+- The extension talks to `127.0.0.1:4177`
+- Sync uses X's private web GraphQL endpoints, so X can change them
+- Momento sniffs live query IDs to reduce breakage
+- Phone tunnels should be treated as temporary personal links
 
-- Not a full bookmark reader ([bookmarx](https://github.com/vignesh07/bookmarx) is that, for bookmarks)
-- Not a cloud sync service
-- Not continuous background magic — open the popup when you care
-- Not medical advice for anterograde amnesia
+## Development
+
+```bash
+npm test
+npm run check
+MOMENTO_HOME=/tmp/momento-dev momento serve
+```
 
 ## License
 

@@ -1,51 +1,74 @@
-const btn = document.getElementById("sync");
-const log = document.getElementById("log");
 const SERVER = "http://127.0.0.1:4177";
+const syncButton = document.querySelector("#sync");
+const openButton = document.querySelector("#open-app");
+const log = document.querySelector("#log");
+const status = document.querySelector("#status");
+
+syncButton.addEventListener("click", startSync);
+openButton.addEventListener("click", () => chrome.tabs.create({ url: SERVER }));
+refreshHealth();
 
 async function refreshHealth() {
   try {
-    const res = await fetch(`${SERVER}/health`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    log.className = "ok";
-    log.textContent = `Server ok · ${data.total ?? 0} likes in vault`;
-    btn.disabled = false;
+    const response = await fetch(`${SERVER}/api/health`);
+    if (!response.ok) throw new Error();
+    const data = await response.json();
+    status.className = "online";
+    status.lastElementChild.textContent = "Archive ready";
+    document.querySelector("#bookmark-count").textContent = `${format(data.counts?.bookmark)} saved`;
+    document.querySelector("#heart-count").textContent = `${format(data.counts?.heart)} saved`;
+    syncButton.disabled = false;
+    openButton.disabled = false;
+    log.className = "";
+    log.textContent = `${format(data.total)} unique memories in your archive.`;
   } catch {
+    status.className = "offline";
+    status.lastElementChild.textContent = "Archive offline";
+    syncButton.disabled = true;
+    openButton.disabled = true;
     log.className = "err";
-    log.textContent =
-      "Server offline. In a terminal run:\n  momento serve";
-    btn.disabled = true;
+    log.textContent = "In a terminal, run:\n  momento serve";
   }
 }
 
-btn.addEventListener("click", () => {
-  btn.disabled = true;
-  log.className = "";
-  log.textContent = "Starting…";
+function startSync() {
+  const sources = [];
+  if (document.querySelector("#bookmarks").checked) sources.push("bookmark");
+  if (document.querySelector("#hearts").checked) sources.push("heart");
+  if (sources.length === 0) {
+    log.className = "err";
+    log.textContent = "Choose Bookmarks, Hearts, or both.";
+    return;
+  }
 
+  syncButton.disabled = true;
+  log.className = "";
+  log.textContent = "Starting sync…";
   const port = chrome.runtime.connect({ name: "sync" });
-  port.onMessage.addListener((msg) => {
-    if (msg.type === "progress") {
+
+  port.onMessage.addListener((message) => {
+    if (message.type === "progress") {
       log.className = "";
-      log.textContent = msg.text;
-      return;
+      log.textContent = message.text;
     }
-    if (msg.type === "done") {
+    if (message.type === "done") {
       log.className = "ok";
-      log.textContent = `Done. Seen ${msg.seen}, ${msg.inserted} new, ${msg.updated} updated.\nTry: momento search "something"`;
-      btn.disabled = false;
-      return;
+      log.textContent = `Done. ${format(message.inserted)} new · ${format(message.updated)} refreshed.`;
+      syncButton.disabled = false;
+      refreshHealth();
     }
-    if (msg.type === "error") {
+    if (message.type === "error") {
       log.className = "err";
-      log.textContent = msg.text;
-      btn.disabled = false;
+      log.textContent = message.text;
+      syncButton.disabled = false;
     }
   });
   port.onDisconnect.addListener(() => {
-    btn.disabled = false;
+    syncButton.disabled = false;
   });
-  port.postMessage({ type: "start" });
-});
+  port.postMessage({ type: "start", sources });
+}
 
-refreshHealth();
+function format(value = 0) {
+  return new Intl.NumberFormat("en", { notation: value > 9999 ? "compact" : "standard" }).format(value);
+}
