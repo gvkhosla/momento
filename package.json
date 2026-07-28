@@ -1,6 +1,6 @@
 {
   "name": "momento",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Remember everything you heart, bookmark, or share from X.",
   "type": "module",
   "bin": {
@@ -10,7 +10,7 @@
     "momento": "node src/cli.js",
     "start": "node src/cli.js serve",
     "test": "node --test",
-    "check": "for f in src/*.js extension/src/*.js public/*.js; do node --check \"$f\" || exit 1; done && cd web && bun run typecheck && bun run lint",
+    "check": "node -e \"JSON.parse(require('node:fs').readFileSync('extension/manifest.json'))\" && for f in src/*.js extension/src/*.js public/*.js; do node --check \"$f\" || exit 1; done && cd web && bun run typecheck && bun run lint",
     "web:dev": "cd web && bun run dev",
     "web:build": "cd web && bun run build"
   },

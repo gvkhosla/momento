@@ -20,7 +20,7 @@ Open http://localhost:4177 and verify:
 ## Extension sync
 
 1. `chrome://extensions` → Developer mode
-2. Remove/reload the old Momento extension
+2. Reload the existing Momento extension (v0.2.2), or remove the old copy
 3. Load unpacked: `/Users/geetkhosla/momento/extension`
 4. Stay signed in at x.com
 5. Open Momento → choose Bookmarks + Hearts → Sync selected

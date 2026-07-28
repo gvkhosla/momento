@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
   "name": "momento",
-  "version": "0.2.0",
-  "description": "Sync X Hearts and Bookmarks into your searchable Momento archive."
+  "version": "0.2.2",
+  "description": "Sync X Hearts and Bookmarks into your searchable Momento archive.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "permissions": [
     "cookies",
     "webRequest",
@@ -22,6 +28,12 @@
   },
   "action": {
     "default_popup": "src/popup.html",
-    "default_title": "momento"
+    "default_title": "momento",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   }
 }

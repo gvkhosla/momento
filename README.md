@@ -41,12 +41,13 @@ Open [http://localhost:4177](http://localhost:4177).
 
 ## Sync X Hearts + Bookmarks
 
-1. Open `chrome://extensions`
-2. Enable **Developer mode**
-3. **Load unpacked** → select `momento/extension`
-4. Stay signed in at [x.com](https://x.com)
-5. Open the Momento extension
-6. Select **Bookmarks**, **Hearts**, or both → **Sync selected**
+1. Download `momento-extension-v0.2.2.zip` from the [latest release](https://github.com/gvkhosla/momento/releases/latest) and unzip it—or use the local `momento/extension` folder
+2. Open `chrome://extensions`
+3. Enable **Developer mode**
+4. **Load unpacked** → select the unzipped extension folder
+5. Stay signed in at [x.com](https://x.com)
+6. Open the Momento extension
+7. Select **Bookmarks**, **Hearts**, or both → **Sync selected**
 
 If X config capture fails, open your Hearts or Bookmarks page once, let it load, then retry.
 
