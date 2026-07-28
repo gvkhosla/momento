@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "liked",
+  "version": "0.1.0",
+  "description": "Sync your X likes into a local folder of markdown files.",
+  "permissions": [
+    "cookies",
+    "webRequest",
+    "tabs",
+    "declarativeNetRequest",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "liked"
+  }
+}

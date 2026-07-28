@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>liked</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      }
+      body {
+        margin: 0;
+        width: 280px;
+        padding: 14px;
+        background: #0b0b0c;
+        color: #f2f2f3;
+      }
+      h1 {
+        margin: 0 0 4px;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      p {
+        margin: 0 0 12px;
+        font-size: 12px;
+        line-height: 1.4;
+        color: #9a9aa0;
+      }
+      button {
+        width: 100%;
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: #f2f2f3;
+        color: #0b0b0c;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      #log {
+        margin-top: 12px;
+        min-height: 2.5em;
+        font-size: 11px;
+        line-height: 1.45;
+        color: #b8b8be;
+        white-space: pre-wrap;
+      }
+      .ok {
+        color: #7ddea2;
+      }
+      .err {
+        color: #ff8f8f;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>liked</h1>
+    <p>Dump your X likes into local markdown your agent can search.</p>
+    <button id="sync" type="button">Sync likes</button>
+    <div id="log">Server: http://127.0.0.1:4177</div>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
