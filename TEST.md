@@ -1,20 +1,20 @@
-# Test liked (5 min)
+# Test momento (5 min)
 
 ## 1. Server (already can be running)
 
 ```bash
-liked serve
+momento serve
 ```
 
-Expect: `liked listening on http://127.0.0.1:4177`
+Expect: `momento listening on http://127.0.0.1:4177`
 
 ## 2. Optional: demo search without X
 
 ```bash
-liked seed
-liked search pricing
-liked stats
-liked open
+momento seed
+momento search pricing
+momento stats
+momento open
 ```
 
 ## 3. Real X likes
@@ -22,10 +22,10 @@ liked open
 1. Chrome → `chrome://extensions` → Developer mode ON
 2. **Load unpacked** → select:
 
-   `/Users/geetkhosla/liked/extension`
+   `/Users/geetkhosla/momento/extension`
 
 3. Stay signed in at [x.com](https://x.com)
-4. Click the **liked** extension icon → **Sync likes**
+4. Click the **momento** extension icon → **Sync likes**
 5. Wait for “Done…”
 
 If capture fails: open `https://x.com/YOUR_HANDLE/likes`, let it load, sync again.
@@ -33,15 +33,15 @@ If capture fails: open `https://x.com/YOUR_HANDLE/likes`, let it load, sync agai
 ## 4. Search
 
 ```bash
-liked search "a word you remember"
-liked path          # ~/liked-vault
-rg -i "word" "$(liked path)/by-id"
+momento search "a word you remember"
+momento path          # ~/momento-vault
+rg -i "word" "$(momento path)/by-id"
 ```
 
 ## 5. Agent
 
 ```text
-search my liked tweets about pricing
+search my momento tweets about pricing
 ```
 
-(with `liked/skill/SKILL.md` installed, or just tell the agent the vault path)
+(with `momento/skill/SKILL.md` installed, or just tell the agent the vault path)

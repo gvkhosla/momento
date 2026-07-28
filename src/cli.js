@@ -10,26 +10,26 @@ import { DEMO_LIKES } from "./seed.js";
 const VERSION = "0.1.0";
 
 function printHelp() {
-  console.log(`liked ${VERSION} — your X likes as plain searchable files
+  console.log(`momento ${VERSION} — your X likes as plain searchable files
 
 Usage:
-  liked serve [--port 4177] [--home DIR]   Start local ingest server
-  liked search <query> [--home DIR]        Search likes
-  liked stats [--home DIR]                 Count + newest/oldest
-  liked seed [--home DIR]                  Load a few demo likes (no X needed)
-  liked path [--home DIR]                  Print vault directory
-  liked open [--home DIR]                  Open vault in Finder
-  liked help
+  momento serve [--port 4177] [--home DIR]   Start local ingest server
+  momento search <query> [--home DIR]        Search likes
+  momento stats [--home DIR]                 Count + newest/oldest
+  momento seed [--home DIR]                  Load a few demo likes (no X needed)
+  momento path [--home DIR]                  Print vault directory
+  momento open [--home DIR]                  Open vault in Finder
+  momento help
 
 Test path:
-  1. liked serve
-  2. Chrome → Load unpacked → liked/extension
+  1. momento serve
+  2. Chrome → Load unpacked → momento/extension
   3. Sign in to x.com → extension popup → Sync likes
-  4. liked search "whatever you remember"
+  4. momento search "whatever you remember"
 
 Env:
-  LIKED_HOME   Vault directory (default: ~/liked-vault)
-  LIKED_PORT   Server port (default: 4177)
+  MOMENTO_HOME   Vault directory (default: ~/momento-vault)
+  MOMENTO_PORT   Server port (default: 4177)
 `);
 }
 
@@ -53,7 +53,7 @@ function parseArgs(argv) {
 }
 
 function resolveHome(flag) {
-  const raw = flag || process.env.LIKED_HOME || join(homedir(), "liked-vault");
+  const raw = flag || process.env.MOMENTO_HOME || join(homedir(), "momento-vault");
   return resolve(raw.replace(/^~(?=\/|$)/, homedir()));
 }
 
@@ -108,14 +108,14 @@ async function main() {
       `seeded ${result.inserted} new, ${result.updated} updated (total ${result.total})`,
     );
     console.log(`vault: ${home}`);
-    console.log(`try:   liked search pricing`);
+    console.log(`try:   momento search pricing`);
     return;
   }
 
   if (cmd === "search") {
     const query = args._.slice(1).join(" ").trim();
     if (!query) {
-      console.error("usage: liked search <query>");
+      console.error("usage: momento search <query>");
       process.exit(1);
     }
     ensureHome(home);
@@ -123,7 +123,7 @@ async function main() {
     if (hits.length === 0) {
       console.log("No matches.");
       console.log(`vault: ${home}`);
-      console.log("tip: liked seed   # demo data, or sync via the extension");
+      console.log("tip: momento seed   # demo data, or sync via the extension");
       return;
     }
     for (const h of hits) {
@@ -137,18 +137,18 @@ async function main() {
   }
 
   if (cmd === "serve") {
-    const port = Number(args.port || process.env.LIKED_PORT || 4177);
+    const port = Number(args.port || process.env.MOMENTO_PORT || 4177);
     ensureHome(home);
     const server = createServer({ home, port });
     server.on("error", (err) => {
       if (err?.code === "EADDRINUSE") {
-        console.error(`port ${port} already in use — is liked already running?`);
+        console.error(`port ${port} already in use — is momento already running?`);
         process.exit(1);
       }
       throw err;
     });
     server.listen(port, "127.0.0.1", () => {
-      console.log(`liked listening on http://127.0.0.1:${port}`);
+      console.log(`momento listening on http://127.0.0.1:${port}`);
       console.log(`vault → ${home}`);
       console.log(`extension → ${resolve(join(import.meta.dirname, "..", "extension"))}`);
       console.log(`load that folder unpacked in Chrome, then Sync likes`);

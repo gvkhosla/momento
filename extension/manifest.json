@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "liked",
+  "name": "momento",
   "version": "0.1.0",
   "description": "Sync your X likes into a local folder of markdown files.",
   "permissions": [
@@ -22,6 +22,6 @@
   },
   "action": {
     "default_popup": "src/popup.html",
-    "default_title": "liked"
+    "default_title": "momento"
   }
 }

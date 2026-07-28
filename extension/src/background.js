@@ -79,7 +79,7 @@ async function runSyncInner(send) {
   const healthy = await pingServer();
   if (!healthy) {
     throw new Error(
-      "liked server not reachable at http://127.0.0.1:4177 — run: liked serve",
+      "momento server not reachable at http://127.0.0.1:4177 — run: momento serve",
     );
   }
 

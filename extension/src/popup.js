@@ -13,7 +13,7 @@ async function refreshHealth() {
   } catch {
     log.className = "err";
     log.textContent =
-      "Server offline. In a terminal run:\n  liked serve";
+      "Server offline. In a terminal run:\n  momento serve";
     btn.disabled = true;
   }
 }
@@ -32,7 +32,7 @@ btn.addEventListener("click", () => {
     }
     if (msg.type === "done") {
       log.className = "ok";
-      log.textContent = `Done. Seen ${msg.seen}, ${msg.inserted} new, ${msg.updated} updated.\nTry: liked search "something"`;
+      log.textContent = `Done. Seen ${msg.seen}, ${msg.inserted} new, ${msg.updated} updated.\nTry: momento search "something"`;
       btn.disabled = false;
       return;
     }

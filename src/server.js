@@ -169,14 +169,14 @@ function writeKnownIds(home, known) {
 }
 
 function vaultReadme(count) {
-  return `# liked vault
+  return `# momento vault
 
 ${count} likes saved as markdown.
 
 ## Search
 
 \`\`\`bash
-liked search "pricing"
+momento search "pricing"
 rg -i "pricing" by-id/
 \`\`\`
 

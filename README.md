@@ -1,16 +1,20 @@
-# liked
+# momento
 
-> Your X likes, as plain files your agent can search.
+> Your X likes, written down before you forget.
 
-You heart tweets as a bookmark system. Months later you can't find them.
+![momento — polaroids on a wall. REMEMBER. the heart is not a filing system.](./assets/momento.png)
+
+<p align="center"><sub>Like the film: you won't remember. Write it down.<br/>Not affiliated with <i>Memento</i> (2000) — just stealing the bit about external memory.</sub></p>
+
+You heart tweets as a bookmark system. Months later they're gone.
 Obsidian sync + X API + cron is overkill when you need this once in a while.
 
-**liked** dumps your likes into a local folder of markdown. Your agent (or `rg`) already knows how to search files.
+**momento** dumps your likes into a local folder of markdown. Your agent (or `rg`) already knows how to search files.
 
 ```bash
-liked serve
+momento serve
 # load the Chrome extension → Sync likes
-liked search "react compiler"
+momento search "react compiler"
 ```
 
 No database. No hosted app. No accounts. Likes stay on your machine.
@@ -20,10 +24,10 @@ No database. No hosted app. No accounts. Likes stay on your machine.
 Needs Node 20+ and a Chromium browser (Chrome/Arc/Brave/Edge).
 
 ```bash
-git clone https://github.com/gvkhosla/liked.git
-cd liked
+git clone https://github.com/gvkhosla/momento.git
+cd momento
 npm link
-liked serve
+momento serve
 ```
 
 Leave that terminal running.
@@ -34,29 +38,29 @@ Leave that terminal running.
 2. Enable **Developer mode**
 3. **Load unpacked** → select the `extension/` folder in this repo
 4. Stay signed in to [x.com](https://x.com)
-5. Click the **liked** extension icon → **Sync likes**
+5. Click the **momento** extension icon → **Sync likes**
 
 If capture fails: open `https://x.com/YOUR_HANDLE/likes`, let it load, hit Sync again.
 
 ### Search
 
 ```bash
-liked search "pricing"
-liked stats
-liked path          # default: ~/liked-vault
-liked open          # open vault in Finder
+momento search "pricing"
+momento stats
+momento path          # default: ~/momento-vault
+momento open          # open vault in Finder
 ```
 
 Optional demo data (no X needed):
 
 ```bash
-liked seed
-liked search pricing
+momento seed
+momento search pricing
 ```
 
 ## What you get
 
-Each like becomes one markdown file in `~/liked-vault/by-id/`:
+Each like becomes one markdown file in `~/momento-vault/by-id/` — a polaroid for your agent:
 
 ```markdown
 ---
@@ -73,7 +77,7 @@ The best founders are relentlessly resourceful.
 
 Also: `likes.jsonl` for bulk tooling.
 
-Point Obsidian at `~/liked-vault` if you want. Or don't — any agent that can read files works.
+Point Obsidian at `~/momento-vault` if you want. Or don't — any agent that can read files works.
 
 ## Agent skill
 
@@ -92,14 +96,15 @@ Drop [`skill/SKILL.md`](./skill/SKILL.md) into your agent skills dir. Then ask:
 
 | Env / flag | Default | Meaning |
 |---|---|---|
-| `LIKED_HOME` / `--home` | `~/liked-vault` | Where files go |
-| `LIKED_PORT` / `--port` | `4177` | Local server port |
+| `MOMENTO_HOME` / `--home` | `~/momento-vault` | Where files go |
+| `MOMENTO_PORT` / `--port` | `4177` | Local server port |
 
 ## Not this
 
 - Not a full bookmark reader ([bookmarx](https://github.com/vignesh07/bookmarx) is that, for bookmarks)
 - Not a cloud sync service
 - Not continuous background magic — open the popup when you care
+- Not medical advice for anterograde amnesia
 
 ## License
 
