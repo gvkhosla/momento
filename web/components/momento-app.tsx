@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils"
 
 type Source = "bookmark" | "heart" | "shared"
 type SourceFilter = "all" | Source
+type Mode = "search" | "answer"
 
 type Memory = {
   id: string
@@ -59,6 +60,7 @@ type AnswerResponse = {
   error?: string
   local?: boolean
   retrieval?: string
+  references?: Memory[]
 }
 
 const sources: Array<{ value: SourceFilter; label: string }> = [
@@ -75,6 +77,7 @@ const sourceMeta: Record<Source, { label: string; icon: typeof HeartIcon }> = {
 }
 
 export function MomentoApp() {
+  const [mode, setMode] = React.useState<Mode>("search")
   const [query, setQuery] = React.useState("")
   const [debouncedQuery, setDebouncedQuery] = React.useState("")
   const [source, setSource] = React.useState<SourceFilter>("all")
@@ -93,6 +96,7 @@ export function MomentoApp() {
   const [saving, setSaving] = React.useState(false)
   const [toast, setToast] = React.useState("")
   const [answer, setAnswer] = React.useState("")
+  const [answerReferences, setAnswerReferences] = React.useState<Memory[]>([])
   const [answerError, setAnswerError] = React.useState("")
   const [asking, setAsking] = React.useState(false)
   const [refreshKey, setRefreshKey] = React.useState(0)
@@ -106,7 +110,7 @@ export function MomentoApp() {
   React.useEffect(() => {
     let cancelled = false
     const params = new URLSearchParams({
-      q: debouncedQuery,
+      q: mode === "search" ? debouncedQuery : "",
       source,
       limit: "200",
     })
@@ -129,7 +133,7 @@ export function MomentoApp() {
     return () => {
       cancelled = true
     }
-  }, [debouncedQuery, source, refreshKey])
+  }, [debouncedQuery, mode, source, refreshKey])
 
   React.useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -160,6 +164,7 @@ export function MomentoApp() {
     if (!question || asking) return
     setAsking(true)
     setAnswer("")
+    setAnswerReferences([])
     setAnswerError("")
 
     try {
@@ -171,6 +176,7 @@ export function MomentoApp() {
       const data = (await response.json()) as AnswerResponse
       if (!response.ok) throw new Error(data.error || "Momento could not answer that.")
       setAnswer(data.answer || "")
+      setAnswerReferences(data.references || [])
     } catch (error) {
       setAnswerError(error instanceof Error ? error.message : "Momento could not answer that.")
     } finally {
@@ -211,8 +217,16 @@ export function MomentoApp() {
     }
   }
 
+  const displayedItems = mode === "answer" ? answerReferences : items
   const hasArchive = counts.all > 0
-  const hasResults = items.length > 0
+  const hasResults = displayedItems.length > 0
+
+  function changeMode(nextMode: Mode) {
+    setMode(nextMode)
+    setAnswer("")
+    setAnswerReferences([])
+    setAnswerError("")
+  }
 
   return (
     <div className="isolate min-h-svh bg-background">
@@ -250,8 +264,44 @@ export function MomentoApp() {
             Search the things you hearted, bookmarked, or sent here before the timeline swallowed them.
           </p>
 
-          <form onSubmit={askArchive} className="relative mt-8 max-w-3xl">
-            <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="mt-8 inline-flex border border-border bg-card p-1" role="tablist" aria-label="Recall mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "search"}
+              onClick={() => changeMode("search")}
+              className={cn(
+                "flex h-8 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+                mode === "search" && "bg-muted text-foreground",
+              )}
+            >
+              <MagnifyingGlassIcon className="size-3.5" />
+              Search
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "answer"}
+              onClick={() => changeMode("answer")}
+              className={cn(
+                "flex h-8 items-center gap-1.5 px-3 text-xs font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/30",
+                mode === "answer" && "bg-muted text-foreground",
+              )}
+            >
+              <SparkleIcon className="size-3.5" weight="fill" />
+              Answer
+            </button>
+          </div>
+
+          <form
+            onSubmit={mode === "answer" ? askArchive : (event) => event.preventDefault()}
+            className="relative mt-3 max-w-3xl"
+          >
+            {mode === "answer" ? (
+              <SparkleIcon className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-primary" weight="fill" />
+            ) : (
+              <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
+            )}
             <Input
               ref={searchRef}
               name="q"
@@ -260,13 +310,18 @@ export function MomentoApp() {
               onChange={(event) => {
                 setQuery(event.target.value)
                 setAnswer("")
+                setAnswerReferences([])
                 setAnswerError("")
               }}
-              aria-label="Search your archive"
-              placeholder="A phrase, person, or half-remembered idea…"
+              aria-label={mode === "answer" ? "Ask your archive" : "Search your archive"}
+              placeholder={
+                mode === "answer"
+                  ? "Ask a question about what you saved…"
+                  : "A phrase, person, or half-remembered idea…"
+              }
               className="h-14 bg-card pr-24 pl-11 text-base shadow-sm sm:text-sm"
             />
-            {query.trim() ? (
+            {mode === "answer" && query.trim() ? (
               <Button
                 type="submit"
                 size="sm"
@@ -274,7 +329,7 @@ export function MomentoApp() {
                 className="absolute top-1/2 right-2 -translate-y-1/2"
               >
                 <SparkleIcon data-icon="inline-start" weight="fill" />
-                {asking ? "Thinking…" : "Ask"}
+                {asking ? "Thinking…" : "Answer"}
               </Button>
             ) : (
               <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem] text-muted-foreground sm:block">
@@ -283,7 +338,9 @@ export function MomentoApp() {
             )}
           </form>
           <p className="mt-2 text-xs text-muted-foreground">
-            Search updates instantly. Press Ask to synthesize a cited answer with your local model.
+            {mode === "search"
+              ? "Find the right bookmarks, hearts, and shared posts instantly."
+              : "Retrieve the strongest matches, then answer from those references with your local model."}
           </p>
         </section>
 
@@ -296,6 +353,7 @@ export function MomentoApp() {
               onClick={() => {
                 setSource(item.value)
                 setAnswer("")
+                setAnswerReferences([])
                 setAnswerError("")
               }}
               className={cn(
@@ -309,7 +367,7 @@ export function MomentoApp() {
           ))}
         </nav>
 
-        {answer || answerError || asking ? (
+        {mode === "answer" && (answer || answerError || asking) ? (
           <section className="mt-8 max-w-3xl border border-border bg-card p-5 shadow-sm" aria-live="polite">
             <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
               <h2 className="flex items-center gap-2 font-heading text-sm font-semibold tracking-wider uppercase">
@@ -334,19 +392,41 @@ export function MomentoApp() {
           <section className="min-w-0" aria-labelledby="results-heading">
             <div className="flex min-h-8 items-baseline justify-between gap-4 border-b border-border pb-3">
               <h2 id="results-heading" className="font-heading text-sm font-semibold tracking-wider uppercase">
-                {debouncedQuery ? "What surfaced" : "Recently remembered"}
+                {mode === "answer"
+                  ? "References used"
+                  : debouncedQuery
+                    ? "What surfaced"
+                    : "Recently remembered"}
               </h2>
               <p className="text-xs text-muted-foreground tabular-nums">
-                {hasResults ? `${items.length} ${items.length === 1 ? "memory" : "memories"}` : ""}
+                {hasResults
+                  ? `${displayedItems.length} ${
+                      mode === "answer"
+                        ? displayedItems.length === 1 ? "reference" : "references"
+                        : displayedItems.length === 1 ? "memory" : "memories"
+                    }`
+                  : ""}
               </p>
             </div>
 
             {hasResults ? (
               <div role="list">
-                {items.map((item) => (
-                  <MemoryItem key={item.id} item={item} />
+                {displayedItems.map((item, index) => (
+                  <MemoryItem
+                    key={item.id}
+                    item={item}
+                    referenceIndex={mode === "answer" ? index + 1 : undefined}
+                  />
                 ))}
               </div>
+            ) : mode === "answer" && hasArchive ? (
+              <EmptyState
+                eyebrow="Answer mode"
+                title="Ask across what you saved."
+                copy="Momento will retrieve the strongest matching posts, answer only from that evidence, and show every reference below."
+                action="Search instead"
+                onAction={() => changeMode("search")}
+              />
             ) : hasArchive ? (
               <EmptyState
                 eyebrow="Nothing surfaced"
@@ -467,36 +547,17 @@ export function MomentoApp() {
 }
 
 function AnswerText({ answer }: { answer: string }) {
+  const body = answer.split(/\n+Sources:\s*/i)[0] || answer
   return (
     <div className="py-5 text-sm/7 text-foreground">
-      {answer.split("\n").map((line, index) => {
-        const source = line.match(/^(\[\d+\])\s+(https?:\/\/\S+)$/)
-        if (source) {
-          return (
-            <p key={`${line}-${index}`} className="mt-1 flex min-w-0 gap-2 text-xs text-muted-foreground">
-              <span className="shrink-0 font-mono">{source[1]}</span>
-              <a
-                href={source[2]}
-                target="_blank"
-                rel="noreferrer"
-                className="truncate underline decoration-border underline-offset-4 hover:text-foreground"
-              >
-                {source[2]}
-              </a>
-            </p>
-          )
-        }
-        if (line === "Sources:") {
-          return <p key={`${line}-${index}`} className="mt-5 mb-2 text-xs font-semibold uppercase">Sources</p>
-        }
-        if (!line) return <div key={`space-${index}`} className="h-3" />
-        return <p key={`${line}-${index}`}>{line}</p>
-      })}
+      {body.split("\n").map((line, index) =>
+        line ? <p key={`${line}-${index}`}>{line}</p> : <div key={`space-${index}`} className="h-3" />,
+      )}
     </div>
   )
 }
 
-function MemoryItem({ item }: { item: Memory }) {
+function MemoryItem({ item, referenceIndex }: { item: Memory; referenceIndex?: number }) {
   const media = item.media?.find((entry) => entry.kind === "photo" && entry.url)
 
   return (
@@ -507,6 +568,9 @@ function MemoryItem({ item }: { item: Memory }) {
       </Avatar>
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+          {referenceIndex ? (
+            <span className="font-mono text-xs text-primary">[{referenceIndex}]</span>
+          ) : null}
           <p className="max-w-full truncate text-base font-semibold sm:text-sm">{item.author.displayName}</p>
           <p className="text-base text-muted-foreground sm:text-sm">@{item.author.handle}</p>
           <time className="text-sm text-muted-foreground sm:text-xs" dateTime={item.postedAt}>

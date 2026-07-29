@@ -56,7 +56,7 @@ With `llama-cli` and a GGUF instruct model:
 MOMENTO_MODEL=~/models/model.gguf momento ask "What did I save about pricing?"
 ```
 
-Answers must cite the retrieved X URLs and admit when evidence is insufficient.
+In the web app, verify the explicit **Search** and **Answer** modes. Search should show matching memories directly. Answer should show a local synthesis followed by numbered reference cards matching its citations. Answers must admit when evidence is insufficient.
 
 ## Automated checks
 

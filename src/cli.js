@@ -14,7 +14,7 @@ import {
 } from "./store.js";
 import { DEMO_ITEMS } from "./seed.js";
 
-const VERSION = "0.3.1";
+const VERSION = "0.3.2";
 
 function printHelp() {
   console.log(`momento ${VERSION} — remember what you saved on X

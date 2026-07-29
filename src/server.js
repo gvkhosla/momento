@@ -5,6 +5,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateLocalAnswer } from "./answer.js";
 import { captureUrl } from "./capture.js";
+import { deepSearchVault } from "./deep-search.js";
 import { searchItems, searchVault, statsVault } from "./search.js";
 import {
   countSources,
@@ -105,10 +106,16 @@ export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) 
         const question = String(payload.question || "").trim();
         if (!question) return json(res, 400, { error: "Ask a question first." });
         const source = payload.source || "all";
-        const evidence = searchVault(home, question, {
-          source,
-          limit: Math.min(10, Math.max(1, Number(payload.limit || 6))),
-        });
+        const limit = Math.min(10, Math.max(1, Number(payload.limit || 6)));
+        let retrieval = "qmd";
+        let evidence;
+        try {
+          evidence = await deepSearchVault(home, question, { source, limit });
+          if (evidence.length === 0) throw new Error("No QMD matches");
+        } catch {
+          retrieval = "keyword";
+          evidence = searchVault(home, question, { source, limit });
+        }
         if (evidence.length === 0) {
           return json(res, 404, { error: "Nothing in your archive matched that question." });
         }
@@ -121,8 +128,8 @@ export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) 
           });
           return json(res, 200, {
             answer: result.answer,
-            evidence: evidence.map((item) => ({ id: item.id, url: item.url })),
-            retrieval: "keyword",
+            references: evidence,
+            retrieval,
             local: true,
           });
         } finally {

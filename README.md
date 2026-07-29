@@ -96,7 +96,10 @@ momento search "charging customers based on usage" --deep
 
 `--deep` sends a structured `lex` + `vec` query to QMD and skips query expansion and reranking by default, keeping the optional footprint to the embedding model. Add `--rerank` when you want slower local reranking.
 
-The web app shows an **Ask** button whenever the search field has text. It retrieves relevant saved posts, runs a GGUF instruct model on your machine, and displays a private answer with exact X source links.
+The web app has two explicit recall modes:
+
+- **Search** finds and shows the right bookmarks, hearts, and shared posts instantly.
+- **Answer** retrieves the strongest posts first, synthesizes only from that evidence with a local GGUF model, and displays the exact reference cards it used.
 
 The same local answer engine is available from the CLI:
 
