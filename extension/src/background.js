@@ -5,9 +5,17 @@ import { fetchTimeline } from "./xapi.js";
 const SERVER_URL = "http://127.0.0.1:4177";
 const BATCH_SIZE = 50;
 const EARLY_EXIT_THRESHOLD = 100;
+const AUTO_SYNC_ALARM = "momento-auto-sync";
 
 installSniffer();
 installHeaderRule();
+ensureAutoSyncAlarm();
+
+chrome.runtime.onStartup.addListener(ensureAutoSyncAlarm);
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== AUTO_SYNC_ALARM) return;
+  runAutomaticSync().catch((error) => console.warn("Automatic Momento sync skipped", error));
+});
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== "sync") return;
@@ -23,6 +31,22 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 let syncInProgress = false;
+
+function ensureAutoSyncAlarm() {
+  chrome.alarms.create(AUTO_SYNC_ALARM, {
+    delayInMinutes: 60,
+    periodInMinutes: 60,
+  });
+}
+
+async function runAutomaticSync() {
+  if (syncInProgress || !(await pingServer()) || !(await hasXSession())) return;
+  const sources = [];
+  if (await getCapturedConfig("bookmark")) sources.push("bookmark");
+  if (await getCapturedConfig("heart")) sources.push("heart");
+  if (sources.length === 0) return;
+  await runSync(sources, () => {});
+}
 
 async function runSync(sources, send) {
   if (syncInProgress) throw new Error("A sync is already in progress.");

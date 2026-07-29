@@ -21,12 +21,12 @@ Open http://localhost:4177 and verify:
 ## Extension sync
 
 1. `chrome://extensions` → Developer mode
-2. Reload the existing Momento extension (v0.3.0), or remove the old copy
+2. Reload the existing Momento extension (v0.3.3), or remove the old copy
 3. Load unpacked: `/Users/geetkhosla/momento/extension`
 4. Stay signed in at x.com
 5. Open Momento → choose Bookmarks + Hearts → Sync selected
 
-The first real batch automatically removes demo memories.
+The first real batch automatically removes demo memories. After both sources have completed once, leave the browser and local server running and verify the hourly alarm performs an incremental refresh without reopening the popup.
 
 If capture fails, visit these pages once and retry:
 

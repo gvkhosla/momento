@@ -31,6 +31,7 @@
       #log { min-height: 36px; margin: 12px 0 0; color: #706e68; font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
       #log.ok { color: #3f7653; }
       #log.err { color: #b74049; }
+      .auto { margin: 8px 0 0; color: #9c9991; font-size: 11px; line-height: 1.45; }
     </style>
   </head>
   <body>
@@ -53,6 +54,7 @@
     <button id="sync" type="button">Sync selected</button>
     <button id="open-app" type="button">Open Momento</button>
     <p id="log">Run `momento serve`, then sync.</p>
+    <p class="auto">After the first successful sync, Momento checks configured sources hourly while X, your browser, and the local server are available.</p>
     <script type="module" src="popup.js"></script>
   </body>
 </html>

@@ -1,6 +1,6 @@
 {
   "name": "momento",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Remember everything you heart, bookmark, or share from X.",
   "type": "module",
   "bin": {

@@ -9,7 +9,7 @@
 Momento brings **X Hearts + Bookmarks** into one searchable archive without flattening the distinction. The same tweet can be both; it still appears once.
 
 - Mobile-first web app
-- Chrome extension for bulk Hearts and Bookmarks sync
+- Chrome extension for initial bulk sync and hourly incremental refresh
 - Add a tweet from your phone by URL or share target
 - Natural keyword recall: `that tweet about pricing`
 - Optional QMD hybrid lexical + semantic search
@@ -44,7 +44,7 @@ Open [http://localhost:4177](http://localhost:4177).
 
 ## Sync X Hearts + Bookmarks
 
-1. Download `momento-extension-v0.3.0.zip` from the [latest release](https://github.com/gvkhosla/momento/releases/latest) and unzip it—or use the local `momento/extension` folder
+1. Download `momento-extension-v0.3.3.zip` from the [latest release](https://github.com/gvkhosla/momento/releases/latest) and unzip it—or use the local `momento/extension` folder
 2. Open `chrome://extensions`
 3. Enable **Developer mode**
 4. **Load unpacked** → select the unzipped extension folder
@@ -52,7 +52,9 @@ Open [http://localhost:4177](http://localhost:4177).
 6. Open the Momento extension
 7. Select **Bookmarks**, **Hearts**, or both → **Sync selected**
 
-If X config capture fails, open your Hearts or Bookmarks page once, let it load, then retry.
+The first sync is explicit because Momento must capture X's current private GraphQL configuration from your signed-in browser. After a source has synced successfully, the extension checks it hourly whenever the browser is signed in and `momento serve` is running. It exits after 100 already-known items, so later refreshes are incremental rather than full crawls.
+
+If X config capture fails, open your Hearts or Bookmarks page once, let it load, then retry. X cookies remain inside the extension; only normalized tweet records are written to the local Momento API.
 
 ## Use it on your phone
 

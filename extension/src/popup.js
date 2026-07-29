@@ -6,7 +6,7 @@ const status = document.querySelector("#status");
 
 syncButton.addEventListener("click", startSync);
 openButton.addEventListener("click", () => chrome.tabs.create({ url: SERVER }));
-refreshHealth();
+refreshHealth().then(startRequestedSync);
 
 async function refreshHealth() {
   try {
@@ -29,6 +29,14 @@ async function refreshHealth() {
     log.className = "err";
     log.textContent = "In a terminal, run:\n  momento serve";
   }
+}
+
+function startRequestedSync() {
+  const requested = new URLSearchParams(location.search).get("sync");
+  if (!requested || syncButton.disabled) return;
+  document.querySelector("#bookmarks").checked = requested === "all" || requested === "bookmark";
+  document.querySelector("#hearts").checked = requested === "all" || requested === "heart";
+  startSync();
 }
 
 function startSync() {

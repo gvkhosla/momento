@@ -1,7 +1,5 @@
 // Capture X's live GraphQL config so rotating query IDs do not break Momento.
 
-const BEARER =
-  "AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA";
 const PATTERN = /\/i\/api\/graphql\/([^/]+)\/(Likes|Bookmarks)(?:\b|\/|\?)/;
 
 export function installSniffer() {
@@ -87,23 +85,25 @@ export async function captureConfig(source, { timeoutMs = 25000 } = {}) {
 }
 
 async function fetchViewer() {
+  const twid = await chrome.cookies.get({ url: "https://x.com", name: "twid" });
+  const userId = decodeURIComponent(twid?.value || "").match(/u=(\d+)/)?.[1];
+  if (!userId) return null;
+
+  const tab = await chrome.tabs.create({ url: "https://x.com/home", active: false });
   try {
-    const csrf = await chrome.cookies.get({ url: "https://x.com", name: "ct0" });
-    if (!csrf?.value) return null;
-    const response = await fetch("https://api.x.com/1.1/account/verify_credentials.json", {
-      credentials: "include",
-      headers: {
-        authorization: `Bearer ${BEARER}`,
-        "x-csrf-token": csrf.value,
-        "x-twitter-auth-type": "OAuth2Session",
-        "x-twitter-active-user": "yes",
-      },
-    });
-    if (!response.ok) return null;
-    const data = await response.json();
-    return data?.id_str ? { userId: data.id_str, screenName: data.screen_name } : null;
-  } catch {
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline) {
+      await sleep(500);
+      try {
+        const response = await chrome.tabs.sendMessage(tab.id, { type: "momento-detect-profile" });
+        if (response?.screenName) return { userId, screenName: response.screenName };
+      } catch {
+        // The X page or content script is still loading.
+      }
+    }
     return null;
+  } finally {
+    if (tab.id != null) chrome.tabs.remove(tab.id).catch(() => {});
   }
 }
 
