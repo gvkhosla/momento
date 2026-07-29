@@ -1,4 +1,4 @@
-export function transformItem(raw, source) {
+export function transformItem(raw, source, { savedAt } = {}) {
   const tweet = unwrap(raw);
   if (!tweet) return null;
 
@@ -29,6 +29,7 @@ export function transformItem(raw, source) {
     title: null,
   }));
   const now = new Date().toISOString();
+  const sourceSavedAt = savedAt || now;
 
   return {
     id: tweetId,
@@ -41,9 +42,11 @@ export function transformItem(raw, source) {
     },
     text,
     postedAt: legacy.created_at ? new Date(legacy.created_at).toISOString() : now,
-    savedAt: now,
+    savedAt: sourceSavedAt,
     source,
-    ...(source === "heart" ? { likedAt: now } : { bookmarkedAt: now }),
+    ...(source === "heart"
+      ? { likedAt: sourceSavedAt }
+      : { bookmarkedAt: sourceSavedAt }),
     url: `https://x.com/${screenName ?? "i/web"}/status/${tweetId}`,
     media,
     links,

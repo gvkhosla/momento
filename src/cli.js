@@ -2,12 +2,19 @@
 import { spawn } from "node:child_process";
 import { homedir, networkInterfaces } from "node:os";
 import { join, resolve } from "node:path";
+import { answerWithLocalModel } from "./answer.js";
+import { deepSearchVault, deepSetupMessage } from "./deep-search.js";
 import { createServer } from "./server.js";
 import { searchVault, statsVault } from "./search.js";
-import { clearDemo, ensureVault, ingestItems } from "./store.js";
+import {
+  clearDemo,
+  ensureVault,
+  ingestItems,
+  repairLegacySourceOrder,
+} from "./store.js";
 import { DEMO_ITEMS } from "./seed.js";
 
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 
 function printHelp() {
   console.log(`momento ${VERSION} — remember what you saved on X
@@ -15,7 +22,11 @@ function printHelp() {
 Usage:
   momento serve [--port 4177] [--home DIR]   Start the app + sync API
   momento phone [--port 4177]                Open a secure phone tunnel
-  momento search <query> [--source TYPE]     Search hearts + bookmarks
+  momento search <query> [--source TYPE]     Instant local keyword search
+  momento search <query> --deep              QMD hybrid lexical + vector search
+  momento ask <question> [--deep]            Answer from saved posts locally
+  momento deep-setup                         Print the private QMD setup steps
+  momento repair-order --source TYPE         Repair pre-v0.3 crawl ordering
   momento stats [--home DIR]                 Archive counts
   momento seed [--home DIR]                  Load demo items
   momento clear-demo [--home DIR]            Remove demo items
@@ -23,6 +34,7 @@ Usage:
   momento open [--home DIR]                  Open vault in Finder
 
 Sources: all, bookmark, heart, shared
+Local answers use llama-cli and MOMENTO_MODEL (a GGUF instruct model).
 
 Quick start:
   momento seed
@@ -35,8 +47,10 @@ function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (["--home", "--port", "--source", "--token"].includes(arg)) {
+    if (["--home", "--port", "--source", "--token", "--model", "--limit", "--collection"].includes(arg)) {
       args[arg.slice(2)] = argv[++i];
+    } else if (["--deep", "--rerank"].includes(arg)) {
+      args[arg.slice(2)] = true;
     } else if (arg.startsWith("--") && arg.includes("=")) {
       const [key, value] = arg.slice(2).split(/=(.*)/s);
       args[key] = value;
@@ -91,21 +105,60 @@ async function main() {
     return;
   }
 
+  if (command === "deep-setup") {
+    console.log(deepSetupMessage(home));
+    return;
+  }
+
+  if (command === "repair-order") {
+    if (!args.source || args.source === "all") {
+      throw new Error("Usage: momento repair-order --source bookmark|heart|shared");
+    }
+    const result = repairLegacySourceOrder(home, args.source);
+    console.log(`Repaired ${result.repaired} ${args.source} memories.`);
+    if (result.backup) console.log(`Backup: ${result.backup}`);
+    return;
+  }
+
   if (command === "search") {
     const query = args._.slice(1).join(" ").trim();
     if (!query) throw new Error("Usage: momento search <query>");
-    const hits = searchVault(home, query, { source: args.source || "all", limit: 50 });
-    if (hits.length === 0) {
-      console.log("No matches.");
-      return;
+    const options = {
+      source: args.source || "all",
+      limit: Number(args.limit || 50),
+      collection: args.collection,
+      rerank: Boolean(args.rerank),
+    };
+    const hits = args.deep
+      ? await deepSearchVault(home, query, options)
+      : searchVault(home, query, options);
+    printHits(hits);
+    return;
+  }
+
+  if (command === "ask") {
+    const question = args._.slice(1).join(" ").trim();
+    if (!question) throw new Error("Usage: momento ask <question>");
+    const options = {
+      source: args.source || "all",
+      limit: Number(args.limit || 8),
+      collection: args.collection,
+      rerank: Boolean(args.rerank),
+    };
+    let hits;
+    try {
+      hits = await deepSearchVault(home, question, options);
+      console.error(`Evidence: ${hits.length} memories via QMD hybrid search`);
+    } catch (error) {
+      if (args.deep) throw error;
+      hits = searchVault(home, question, options).slice(0, options.limit);
+      console.error("QMD index unavailable; using keyword evidence.");
+      console.error(`Evidence: ${hits.length} memories`);
     }
-    for (const item of hits) {
-      const sources = item.sources.map((source) => sourceLabel(source)).join(" + ");
-      console.log(`\n${dateLabel(item.postedAt)} · @${item.author.handle} · ${sources}`);
-      console.log(`  ${item.text.replace(/\s+/g, " ").slice(0, 180)}`);
-      console.log(`  ${item.url}`);
-    }
-    console.log(`\n${hits.length} match${hits.length === 1 ? "" : "es"}`);
+    await answerWithLocalModel(question, hits, {
+      model: args.model,
+      maxTokens: 420,
+    });
     return;
   }
 
@@ -201,6 +254,20 @@ function lanAddresses() {
     .flat()
     .filter((entry) => entry?.family === "IPv4" && !entry.internal)
     .map((entry) => entry.address);
+}
+
+function printHits(hits) {
+  if (hits.length === 0) {
+    console.log("No matches.");
+    return;
+  }
+  for (const item of hits) {
+    const sources = item.sources.map((source) => sourceLabel(source)).join(" + ");
+    console.log(`\n${dateLabel(item.postedAt)} · @${item.author.handle} · ${sources}`);
+    console.log(`  ${item.text.replace(/\s+/g, " ").slice(0, 180)}`);
+    console.log(`  ${item.url}`);
+  }
+  console.log(`\n${hits.length} match${hits.length === 1 ? "" : "es"}`);
 }
 
 function sourceLabel(source) {

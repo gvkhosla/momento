@@ -48,7 +48,7 @@ export function searchItems(items, query, options = {}) {
     .filter(({ score }) => !normalizedQuery || score > 0)
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
-      return new Date(b.item.savedAt || b.item.postedAt) - new Date(a.item.savedAt || a.item.postedAt);
+      return sortDate(b.item, source) - sortDate(a.item, source);
     });
 
   return scored.slice(offset, offset + limit).map(({ item, score }) => ({
@@ -122,6 +122,19 @@ function normalize(value) {
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim();
+}
+
+function sortDate(item, source) {
+  const value =
+    source === "bookmark"
+      ? item.bookmarkedAt
+      : source === "heart"
+        ? item.likedAt
+        : source === "shared"
+          ? item.sharedAt
+          : item.savedAt;
+  const timestamp = new Date(value || item.savedAt || item.postedAt || 0).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function clamp(value, min, max) {

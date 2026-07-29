@@ -1,4 +1,5 @@
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -112,6 +113,48 @@ export function clearDemo(home) {
   return demos.length;
 }
 
+/**
+ * Repair archives imported before v0.3, when later crawl pages accidentally
+ * received newer save timestamps. This is intentionally explicit and creates
+ * a backup because it should only be run once on an affected source.
+ */
+export function repairLegacySourceOrder(home, source) {
+  const wanted = normalizeSource(source);
+  if (!wanted) throw new Error("Choose bookmark, heart, or shared.");
+
+  const items = loadItems(home);
+  const candidates = items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => item.sources.includes(wanted));
+  if (candidates.length === 0) {
+    return { repaired: 0, backup: null };
+  }
+
+  const storePath = join(home, STORE_FILE);
+  const backup = join(home, `items.before-${wanted}-order-repair.${Date.now()}.json`);
+  copyFileSync(storePath, backup);
+
+  const sourceKey = sourceDateKey(wanted);
+  candidates.sort((a, b) => {
+    const aDate = new Date(a.item[sourceKey] || a.item.savedAt || 0).getTime();
+    const bDate = new Date(b.item[sourceKey] || b.item.savedAt || 0).getTime();
+    return aDate - bDate || a.index - b.index;
+  });
+
+  const base = Date.now();
+  for (let index = 0; index < candidates.length; index += 1) {
+    const item = candidates[index].item;
+    item[sourceKey] = new Date(base - index).toISOString();
+    item.savedAt = latestSourceDate(item) || item.savedAt;
+  }
+
+  items.sort(sortNewestFirst);
+  writeStore(home, items);
+  for (const item of items) writeMarkdown(home, item);
+  writeVaultReadme(home, items);
+  return { repaired: candidates.length, backup };
+}
+
 export function normalizeSource(value) {
   if (!value) return null;
   const source = String(value).toLowerCase();
@@ -175,19 +218,47 @@ function normalizeRecord(raw, fallbackDate = new Date().toISOString()) {
 function mergeRecords(previous, next, now) {
   const sources = [...new Set([...previous.sources, ...next.sources])];
   const richer = scoreRichness(next) >= scoreRichness(previous) ? next : previous;
+  const likedAt = mergeSourceDate(previous, next, "heart", "likedAt");
+  const bookmarkedAt = mergeSourceDate(previous, next, "bookmark", "bookmarkedAt");
+  const sharedAt = mergeSourceDate(previous, next, "shared", "sharedAt");
 
-  return {
+  const merged = {
     ...previous,
     ...richer,
     id: previous.id,
     sources,
-    likedAt: next.likedAt || previous.likedAt || null,
-    bookmarkedAt: next.bookmarkedAt || previous.bookmarkedAt || null,
-    sharedAt: next.sharedAt || previous.sharedAt || null,
-    savedAt: latestDate(previous.savedAt, next.savedAt) || now,
+    likedAt,
+    bookmarkedAt,
+    sharedAt,
     syncedAt: now,
     demo: Boolean(previous.demo && next.demo),
   };
+  merged.savedAt = latestSourceDate(merged) || previous.savedAt || next.savedAt || now;
+  return merged;
+}
+
+function mergeSourceDate(previous, next, source, key) {
+  if (previous.sources.includes(source)) {
+    return previous[key] || previous.savedAt || null;
+  }
+  if (next.sources.includes(source)) {
+    return next[key] || next.savedAt || null;
+  }
+  return previous[key] || next[key] || null;
+}
+
+function sourceDateKey(source) {
+  return source === "heart"
+    ? "likedAt"
+    : source === "bookmark"
+      ? "bookmarkedAt"
+      : "sharedAt";
+}
+
+function latestSourceDate(item) {
+  return [item.likedAt, item.bookmarkedAt, item.sharedAt]
+    .filter(Boolean)
+    .sort((a, b) => new Date(b) - new Date(a))[0] || null;
 }
 
 function scoreRichness(item) {

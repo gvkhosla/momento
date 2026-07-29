@@ -59,6 +59,8 @@ async function syncSource(source, send) {
   let consecutiveKnown = 0;
   let batch = [];
   const totals = { seen: 0, inserted: 0, updated: 0 };
+  const syncStartedAt = Date.now();
+  let sourcePosition = 0;
   const onLog = (text) => send({ type: "progress", source, text });
 
   const flush = async () => {
@@ -76,7 +78,11 @@ async function syncSource(source, send) {
   };
 
   for await (const raw of fetchTimeline(config, source, { onLog })) {
-    const item = transformItem(raw, source);
+    // X timelines arrive newest-save first. Preserve that ordering even though
+    // X does not expose an exact bookmarked/liked timestamp.
+    const savedAt = new Date(syncStartedAt - sourcePosition).toISOString();
+    sourcePosition += 1;
+    const item = transformItem(raw, source, { savedAt });
     if (!item) continue;
     batch.push(item);
 

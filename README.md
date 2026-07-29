@@ -12,6 +12,9 @@ Momento brings **X Hearts + Bookmarks** into one searchable archive without flat
 - Chrome extension for bulk Hearts and Bookmarks sync
 - Add a tweet from your phone by URL or share target
 - Natural keyword recall: `that tweet about pricing`
+- Optional QMD hybrid lexical + semantic search
+- Grounded local answers with citations via llama.cpp
+- Reverse-chronological source timelines
 - Plain markdown mirror for Obsidian and local agents
 - Local-first: browser cookies never leave the extension
 
@@ -41,7 +44,7 @@ Open [http://localhost:4177](http://localhost:4177).
 
 ## Sync X Hearts + Bookmarks
 
-1. Download `momento-extension-v0.2.2.zip` from the [latest release](https://github.com/gvkhosla/momento/releases/latest) and unzip it—or use the local `momento/extension` folder
+1. Download `momento-extension-v0.3.0.zip` from the [latest release](https://github.com/gvkhosla/momento/releases/latest) and unzip it—or use the local `momento/extension` folder
 2. Open `chrome://extensions`
 3. Enable **Developer mode**
 4. **Load unpacked** → select the unzipped extension folder
@@ -73,11 +76,38 @@ Your archive still lives at `~/momento-vault`; the tunnel only exposes the runni
 
 > For a permanent multi-user cloud product, Momento needs accounts and an encrypted sync backend. This release deliberately keeps your X session and archive local.
 
-## CLI recall
+## Search and local answers
+
+Instant keyword search remains the default:
 
 ```bash
 momento search "the thread about usage pricing"
 momento search "design systems" --source bookmark
+```
+
+Optional deep search uses QMD's BM25 + vector retrieval and rank fusion. Momento does not index private files or download models automatically:
+
+```bash
+momento deep-setup
+
+# Run the printed commands yourself once, then:
+momento search "charging customers based on usage" --deep
+```
+
+`--deep` sends a structured `lex` + `vec` query to QMD and skips query expansion and reranking by default, keeping the optional footprint to the embedding model. Add `--rerank` when you want slower local reranking.
+
+A small local answer engine retrieves saved posts, then asks a GGUF instruct model to synthesize only from that evidence with numbered citations:
+
+```bash
+brew install llama.cpp
+export MOMENTO_MODEL=~/models/your-instruct-model.gguf
+momento ask "What patterns have I saved about reliable agents?"
+momento ask "Summarize what I saved about pricing" --source bookmark
+```
+
+Momento automatically chooses the smallest `.gguf` in `~/models` when `MOMENTO_MODEL` is unset. QMD is preferred for evidence when configured; otherwise `ask` falls back to keyword evidence.
+
+```bash
 momento stats
 momento path
 momento open
@@ -141,7 +171,11 @@ The agent uses `momento search` or reads `~/momento-vault/by-id`.
 |---|---|
 | `momento serve` | Run the PWA and local sync API |
 | `momento phone` | Create a secure temporary phone URL |
-| `momento search <query>` | Search the archive |
+| `momento search <query>` | Instant keyword search |
+| `momento search <query> --deep` | QMD hybrid lexical + vector search |
+| `momento ask <question>` | Answer locally from cited saved posts |
+| `momento deep-setup` | Print manual QMD setup/refresh commands |
+| `momento repair-order --source TYPE` | Repair ordering from pre-v0.3 imports |
 | `momento stats` | Count unique items and sources |
 | `momento seed` | Add four demo memories |
 | `momento clear-demo` | Remove demo memories |
@@ -154,6 +188,8 @@ The agent uses `momento search` or reads `~/momento-vault/by-id`.
 - The extension talks to `127.0.0.1:4177`
 - Sync uses X's private web GraphQL endpoints, so X can change them
 - Momento sniffs live query IDs to reduce breakage
+- X omits exact save timestamps; Momento preserves the source timeline order using stable synthetic timestamps
+- QMD indexing and local model downloads are always explicit opt-ins
 - Phone tunnels should be treated as temporary personal links
 
 ## Development

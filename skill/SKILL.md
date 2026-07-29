@@ -15,6 +15,8 @@ momento stats
 momento search "query"
 momento search "query" --source bookmark
 momento search "query" --source heart
+momento search "half-remembered idea" --deep
+momento ask "What patterns did I save about this?"
 ```
 
 The canonical archive is `$MOMENTO_HOME/items.json` (default `~/momento-vault/items.json`). Agent-readable markdown is in `~/momento-vault/by-id/*.md`.
@@ -24,7 +26,9 @@ The canonical archive is `$MOMENTO_HOME/items.json` (default `~/momento-vault/it
 1. Run `momento stats` to confirm the archive exists.
 2. Search with the user's remembered phrase, person, or idea.
 3. Use `--source bookmark` or `--source heart` only when their wording signals intent.
-4. Quote the matching tweet and include its X URL.
+4. Use `--deep` for conceptual recall when QMD is configured.
+5. Use `momento ask` only when synthesis is requested; preserve its numbered citations.
+6. Quote the matching tweet and include its X URL.
 5. If results are stale, ask the user to open the extension and sync.
 
 ## Source semantics
