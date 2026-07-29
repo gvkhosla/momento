@@ -96,7 +96,9 @@ momento search "charging customers based on usage" --deep
 
 `--deep` sends a structured `lex` + `vec` query to QMD and skips query expansion and reranking by default, keeping the optional footprint to the embedding model. Add `--rerank` when you want slower local reranking.
 
-A small local answer engine retrieves saved posts, then asks a GGUF instruct model to synthesize only from that evidence with numbered citations:
+The web app shows an **Ask** button whenever the search field has text. It retrieves relevant saved posts, runs a GGUF instruct model on your machine, and displays a private answer with exact X source links.
+
+The same local answer engine is available from the CLI:
 
 ```bash
 brew install llama.cpp

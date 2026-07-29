@@ -13,6 +13,7 @@ import {
   MagnifyingGlassIcon,
   PlusIcon,
   ShareNetworkIcon,
+  SparkleIcon,
 } from "@phosphor-icons/react"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -53,6 +54,13 @@ type ArchiveResponse = {
   counts: Counts
 }
 
+type AnswerResponse = {
+  answer?: string
+  error?: string
+  local?: boolean
+  retrieval?: string
+}
+
 const sources: Array<{ value: SourceFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "bookmark", label: "Bookmarks" },
@@ -84,6 +92,9 @@ export function MomentoApp() {
   const [captureError, setCaptureError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [toast, setToast] = React.useState("")
+  const [answer, setAnswer] = React.useState("")
+  const [answerError, setAnswerError] = React.useState("")
+  const [asking, setAsking] = React.useState(false)
   const [refreshKey, setRefreshKey] = React.useState(0)
   const searchRef = React.useRef<HTMLInputElement>(null)
 
@@ -142,6 +153,30 @@ export function MomentoApp() {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined)
     }
   }, [])
+
+  async function askArchive(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const question = query.trim()
+    if (!question || asking) return
+    setAsking(true)
+    setAnswer("")
+    setAnswerError("")
+
+    try {
+      const response = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ question, source, limit: 6 }),
+      })
+      const data = (await response.json()) as AnswerResponse
+      if (!response.ok) throw new Error(data.error || "Momento could not answer that.")
+      setAnswer(data.answer || "")
+    } catch (error) {
+      setAnswerError(error instanceof Error ? error.message : "Momento could not answer that.")
+    } finally {
+      setAsking(false)
+    }
+  }
 
   async function pasteFromClipboard() {
     try {
@@ -215,22 +250,41 @@ export function MomentoApp() {
             Search the things you hearted, bookmarked, or sent here before the timeline swallowed them.
           </p>
 
-          <div className="relative mt-8 max-w-3xl">
+          <form onSubmit={askArchive} className="relative mt-8 max-w-3xl">
             <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               ref={searchRef}
               name="q"
               type="search"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value)
+                setAnswer("")
+                setAnswerError("")
+              }}
               aria-label="Search your archive"
               placeholder="A phrase, person, or half-remembered idea…"
-              className="h-14 bg-card pr-14 pl-11 text-base shadow-sm sm:text-sm"
+              className="h-14 bg-card pr-24 pl-11 text-base shadow-sm sm:text-sm"
             />
-            <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem] text-muted-foreground sm:block">
-              ⌘ K
-            </kbd>
-          </div>
+            {query.trim() ? (
+              <Button
+                type="submit"
+                size="sm"
+                disabled={asking || online === false}
+                className="absolute top-1/2 right-2 -translate-y-1/2"
+              >
+                <SparkleIcon data-icon="inline-start" weight="fill" />
+                {asking ? "Thinking…" : "Ask"}
+              </Button>
+            ) : (
+              <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.6875rem] text-muted-foreground sm:block">
+                ⌘ K
+              </kbd>
+            )}
+          </form>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Search updates instantly. Press Ask to synthesize a cited answer with your local model.
+          </p>
         </section>
 
         <nav className="mt-5 flex max-w-3xl gap-1 overflow-x-auto" aria-label="Filter archive">
@@ -239,7 +293,11 @@ export function MomentoApp() {
               key={item.value}
               type="button"
               aria-pressed={source === item.value}
-              onClick={() => setSource(item.value)}
+              onClick={() => {
+                setSource(item.value)
+                setAnswer("")
+                setAnswerError("")
+              }}
               className={cn(
                 "flex h-9 shrink-0 items-center gap-1.5 px-3 text-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring/30 sm:text-xs",
                 source === item.value && "bg-muted text-foreground",
@@ -250,6 +308,27 @@ export function MomentoApp() {
             </button>
           ))}
         </nav>
+
+        {answer || answerError || asking ? (
+          <section className="mt-8 max-w-3xl border border-border bg-card p-5 shadow-sm" aria-live="polite">
+            <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
+              <h2 className="flex items-center gap-2 font-heading text-sm font-semibold tracking-wider uppercase">
+                <SparkleIcon className="size-4 text-primary" weight="fill" />
+                Answer from your archive
+              </h2>
+              <span className="font-mono text-[0.6875rem] text-muted-foreground uppercase">
+                Local · private
+              </span>
+            </div>
+            {asking ? (
+              <p className="py-6 text-sm text-muted-foreground">Reading the most relevant memories…</p>
+            ) : answerError ? (
+              <p className="py-6 text-sm text-destructive">{answerError}</p>
+            ) : (
+              <AnswerText answer={answer} />
+            )}
+          </section>
+        ) : null}
 
         <div className="mt-12 grid gap-16 lg:grid-cols-[minmax(0,48rem)_13rem]">
           <section className="min-w-0" aria-labelledby="results-heading">
@@ -383,6 +462,36 @@ export function MomentoApp() {
           {toast}
         </div>
       ) : null}
+    </div>
+  )
+}
+
+function AnswerText({ answer }: { answer: string }) {
+  return (
+    <div className="py-5 text-sm/7 text-foreground">
+      {answer.split("\n").map((line, index) => {
+        const source = line.match(/^(\[\d+\])\s+(https?:\/\/\S+)$/)
+        if (source) {
+          return (
+            <p key={`${line}-${index}`} className="mt-1 flex min-w-0 gap-2 text-xs text-muted-foreground">
+              <span className="shrink-0 font-mono">{source[1]}</span>
+              <a
+                href={source[2]}
+                target="_blank"
+                rel="noreferrer"
+                className="truncate underline decoration-border underline-offset-4 hover:text-foreground"
+              >
+                {source[2]}
+              </a>
+            </p>
+          )
+        }
+        if (line === "Sources:") {
+          return <p key={`${line}-${index}`} className="mt-5 mb-2 text-xs font-semibold uppercase">Sources</p>
+        }
+        if (!line) return <div key={`space-${index}`} className="h-3" />
+        return <p key={`${line}-${index}`}>{line}</p>
+      })}
     </div>
   )
 }

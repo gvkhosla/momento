@@ -3,8 +3,9 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
+import { generateLocalAnswer } from "./answer.js";
 import { captureUrl } from "./capture.js";
-import { searchItems, statsVault } from "./search.js";
+import { searchItems, searchVault, statsVault } from "./search.js";
 import {
   countSources,
   getKnownIds,
@@ -34,6 +35,7 @@ const MIME = {
 
 export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) {
   let phoneToken = "";
+  let answering = false;
 
   return createHttpServer(async (req, res) => {
     setCors(res);
@@ -95,6 +97,37 @@ export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) 
 
       if (req.method === "GET" && pathname === "/api/stats") {
         return json(res, 200, statsVault(home));
+      }
+
+      if (req.method === "POST" && pathname === "/api/ask") {
+        if (answering) return json(res, 409, { error: "Momento is already answering another question." });
+        const payload = await readPayload(req);
+        const question = String(payload.question || "").trim();
+        if (!question) return json(res, 400, { error: "Ask a question first." });
+        const source = payload.source || "all";
+        const evidence = searchVault(home, question, {
+          source,
+          limit: Math.min(10, Math.max(1, Number(payload.limit || 6))),
+        });
+        if (evidence.length === 0) {
+          return json(res, 404, { error: "Nothing in your archive matched that question." });
+        }
+
+        answering = true;
+        try {
+          const result = await generateLocalAnswer(question, evidence, {
+            model: payload.model,
+            maxTokens: 420,
+          });
+          return json(res, 200, {
+            answer: result.answer,
+            evidence: evidence.map((item) => ({ id: item.id, url: item.url })),
+            retrieval: "keyword",
+            local: true,
+          });
+        } finally {
+          answering = false;
+        }
       }
 
       if (req.method === "GET" && pathname === "/api/known-ids") {

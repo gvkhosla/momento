@@ -7,7 +7,9 @@ export function buildAnswerPrompt(question, items) {
   const evidence = items
     .map((item, index) => {
       const sources = (item.sources || []).join(", ");
-      return `[${index + 1}] @${item.author?.handle || "unknown"} · ${String(item.postedAt || "").slice(0, 10)} · ${sources}\n${item.text}\n${item.url}`;
+      const fullText = String(item.text || "").trim();
+      const text = fullText.length > 1_600 ? `${fullText.slice(0, 1_600)}…` : fullText;
+      return `[${index + 1}] @${item.author?.handle || "unknown"} · ${String(item.postedAt || "").slice(0, 10)} · ${sources}\n${text}\n${item.url}`;
     })
     .join("\n\n");
 
@@ -45,6 +47,18 @@ export function findLocalModel(explicitPath) {
 }
 
 export async function answerWithLocalModel(question, items, options = {}) {
+  const { answer } = await generateLocalAnswer(question, items, {
+    ...options,
+    onStart: ({ model }) => {
+      console.error(`Local model: ${model}`);
+      console.error("Thinking locally…");
+      options.onStart?.({ model });
+    },
+  });
+  process.stdout.write(`${answer}\n`);
+}
+
+export async function generateLocalAnswer(question, items, options = {}) {
   if (!items.length) throw new Error("No evidence matched that question.");
   const model = findLocalModel(options.model);
   if (!model) {
@@ -73,8 +87,7 @@ export async function answerWithLocalModel(question, items, options = {}) {
     prompt,
   ];
 
-  console.error(`Local model: ${model}`);
-  console.error("Thinking locally…");
+  options.onStart?.({ model });
   const output = await new Promise((resolvePromise, reject) => {
     const child = spawn(binary, args, { stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
@@ -94,7 +107,10 @@ export async function answerWithLocalModel(question, items, options = {}) {
     });
   });
   const answer = extractLlamaAnswer(output);
-  process.stdout.write(`${formatGroundedAnswer(answer, items)}\n`);
+  if (/^(error:|failed\b)|exceeds the available context size/i.test(answer)) {
+    throw new Error(answer.split("\n")[0]);
+  }
+  return { answer: formatGroundedAnswer(answer, items), model };
 }
 
 export function formatGroundedAnswer(answer, items) {
