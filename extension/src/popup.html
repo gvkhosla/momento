@@ -39,7 +39,7 @@
       <h1>momento<span>.</span></h1>
       <p id="status"><span class="dot"></span><span>Checking archive</span></p>
     </header>
-    <p class="intro">Bring your X memory home. Sync both, or choose the timeline you want.</p>
+    <p class="intro">Keep an eye on X bookmarks. Momento extracts the linked article and writes you a daily brief.</p>
     <fieldset>
       <legend>Sources to sync</legend>
       <label>
@@ -47,14 +47,14 @@
         <span class="option"><b>Bookmarks</b><span id="bookmark-count">0 saved</span></span>
       </label>
       <label>
-        <input id="hearts" type="checkbox" checked />
+        <input id="hearts" type="checkbox" />
         <span class="option"><b>Hearts</b><span id="heart-count">0 saved</span></span>
       </label>
     </fieldset>
     <button id="sync" type="button">Sync selected</button>
     <button id="open-app" type="button">Open Momento</button>
     <p id="log">Run `momento serve`, then sync.</p>
-    <p class="auto">After the first successful sync, Momento checks configured sources hourly while X, your browser, and the local server are available.</p>
+    <p class="auto">Bookmark something on X and Momento picks it up within a minute while this browser and `momento serve` are running.</p>
     <script type="module" src="popup.js"></script>
   </body>
 </html>

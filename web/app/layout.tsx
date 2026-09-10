@@ -11,8 +11,8 @@ const mono = Geist_Mono({ subsets: ["latin"], variable: "--font-mono" })
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:4177"),
-  title: "Momento — remember what you saved",
-  description: "Remember everything you heart, bookmark, or share from X.",
+  title: "Momento — your bookmarks, written back to you",
+  description: "Watch X bookmarks, extract the linked work, and send a daily brief.",
   applicationName: "Momento",
   manifest: "/manifest.webmanifest",
   appleWebApp: {

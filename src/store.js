@@ -5,6 +5,7 @@ import {
   readFileSync,
   readdirSync,
   renameSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -13,6 +14,7 @@ import { slugName, toMarkdown } from "./format.js";
 
 const STORE_FILE = "items.json";
 const SOURCE_NAMES = new Set(["heart", "bookmark", "shared"]);
+const storeCache = new Map();
 
 export function ensureVault(home) {
   mkdirSync(home, { recursive: true });
@@ -25,8 +27,15 @@ export function loadItems(home) {
   if (!existsSync(path)) return [];
 
   try {
+    const stat = statSync(path);
+    const cached = storeCache.get(path);
+    if (cached?.mtimeMs === stat.mtimeMs && cached?.size === stat.size) {
+      return cached.items;
+    }
     const data = JSON.parse(readFileSync(path, "utf8"));
-    return Array.isArray(data) ? data.map(normalizeRecord).filter(Boolean) : [];
+    const items = Array.isArray(data) ? data.map(normalizeRecord).filter(Boolean) : [];
+    storeCache.set(path, { mtimeMs: stat.mtimeMs, size: stat.size, items });
+    return items;
   } catch {
     return [];
   }
@@ -52,33 +61,43 @@ export function ingestItems(home, incoming, { removeDemo = true } = {}) {
   const byId = new Map(existing.map((item) => [String(item.id), item]));
   let inserted = 0;
   let updated = 0;
-  let skipped = incoming.length - validIncoming.length;
+  let unchanged = 0;
+  const skipped = incoming.length - validIncoming.length;
   const changed = [];
 
   for (const next of validIncoming) {
     const previous = byId.get(next.id);
     const merged = previous ? mergeRecords(previous, next, now) : next;
+    if (previous && sameRecord(previous, merged)) {
+      unchanged += 1;
+      continue;
+    }
     byId.set(next.id, merged);
     changed.push({ previous, current: merged });
     if (previous) updated += 1;
     else inserted += 1;
   }
 
-  const items = [...byId.values()].sort(sortNewestFirst);
-  writeStore(home, items);
+  const hasChanges = changed.length > 0 || demosToRemove.length > 0;
+  const items = hasChanges
+    ? [...byId.values()].sort(sortNewestFirst)
+    : existing;
 
-  for (const demo of demosToRemove) removeMarkdown(home, demo);
-  for (const { previous, current } of changed) {
-    if (previous) removeStaleMarkdown(home, previous, current);
-    writeMarkdown(home, current);
+  if (hasChanges) {
+    writeStore(home, items);
+    for (const demo of demosToRemove) removeMarkdown(home, demo);
+    for (const { previous, current } of changed) {
+      if (previous) removeStaleMarkdown(home, previous, current);
+      writeMarkdown(home, current);
+    }
+    writeVaultReadme(home, items);
   }
-
-  writeVaultReadme(home, items);
 
   return {
     seen: incoming.length,
     inserted,
     updated,
+    unchanged,
     skipped,
     total: items.length,
     counts: countSources(items),
@@ -210,8 +229,31 @@ function normalizeRecord(raw, fallbackDate = new Date().toISOString()) {
       (sources.includes("shared") ? savedAt : null),
     links: Array.isArray(raw.links) ? raw.links.filter(Boolean) : [],
     media: Array.isArray(raw.media) ? raw.media.filter(Boolean) : [],
+    extraction: normalizeExtraction(raw.extraction),
     demo: Boolean(raw.demo),
     syncedAt: validDate(raw.syncedAt || raw.synced_at) || fallbackDate,
+  };
+}
+
+function normalizeExtraction(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const status = String(raw.status || "").toLowerCase();
+  if (!status) return null;
+  return {
+    status,
+    url: raw.url || "",
+    title: raw.title || "",
+    site: raw.site || "",
+    description: raw.description || "",
+    text: raw.text || "",
+    excerpt: raw.excerpt || "",
+    imageUrl: raw.imageUrl || "",
+    localImage: raw.localImage || "",
+    wordCount: Number(raw.wordCount || 0) || 0,
+    kind: raw.kind || "",
+    reason: raw.reason || "",
+    error: raw.error || "",
+    extractedAt: validDate(raw.extractedAt) || null,
   };
 }
 
@@ -230,11 +272,16 @@ function mergeRecords(previous, next, now) {
     likedAt,
     bookmarkedAt,
     sharedAt,
+    extraction: richerExtraction(previous.extraction, next.extraction),
     syncedAt: now,
     demo: Boolean(previous.demo && next.demo),
   };
   merged.savedAt = latestSourceDate(merged) || previous.savedAt || next.savedAt || now;
   return merged;
+}
+
+function sameRecord(previous, next) {
+  return JSON.stringify({ ...previous, syncedAt: null }) === JSON.stringify({ ...next, syncedAt: null });
 }
 
 function mergeSourceDate(previous, next, source, key) {
@@ -266,15 +313,27 @@ function scoreRichness(item) {
     String(item.text || "").length +
     item.links.length * 40 +
     item.media.length * 40 +
-    (item.author?.avatarUrl ? 20 : 0)
+    (item.author?.avatarUrl ? 20 : 0) +
+    (item.extraction?.status === "ready" ? 200 + String(item.extraction.text || "").length : 0)
   );
+}
+
+function richerExtraction(previous, next) {
+  if (!next) return previous || null;
+  if (!previous) return next;
+  const rank = (value) =>
+    value?.status === "ready" ? 3 : value?.status === "skipped" ? 2 : value?.status === "failed" ? 1 : 0;
+  if (rank(next) !== rank(previous)) return rank(next) > rank(previous) ? next : previous;
+  return String(next.text || "").length >= String(previous.text || "").length ? next : previous;
 }
 
 function writeStore(home, items) {
   const target = join(home, STORE_FILE);
   const temp = `${target}.tmp`;
-  writeFileSync(temp, `${JSON.stringify(items, null, 2)}\n`, "utf8");
+  writeFileSync(temp, `${JSON.stringify(items)}\n`, "utf8");
   renameSync(temp, target);
+  const stat = statSync(target);
+  storeCache.set(target, { mtimeMs: stat.mtimeMs, size: stat.size, items });
 }
 
 function writeMarkdown(home, item) {
@@ -310,26 +369,28 @@ function writeVaultReadme(home, items) {
     join(home, "README.md"),
     `# Momento vault
 
-Your X memory, as plain markdown.
+Your bookmark memory, as plain markdown.
 
 - ${counts.all} unique items
 - ${counts.bookmark} bookmarks
-- ${counts.heart} hearts
+- ${counts.heart} hearts still stored, not used for briefs
 - ${counts.shared} shared directly
 
 ## Search
 
 \`\`\`bash
-momento search "pricing"
+momento search "pricing" --source bookmark
 rg -i "pricing" by-id/
 \`\`\`
 
 ## Layout
 
-- \`by-id/*.md\` — one file per tweet
+- \`by-id/*.md\` — one file per tweet, plus extracted article text
 - \`items.json\` — canonical merged archive
+- \`briefs/\` — daily briefs as json + markdown
+- \`media/\` — downloaded article images
 
-A tweet can be both hearted and bookmarked without being duplicated.
+Briefs and search use bookmarks only.
 `,
     "utf8",
   );

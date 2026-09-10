@@ -63,6 +63,17 @@ test("re-syncing a known source preserves its original saved position", () => {
   assert.equal(loadItems(home)[0].bookmarkedAt, "2026-01-01T00:00:00.000Z");
 });
 
+test("unchanged incremental batches do not rewrite the vault", () => {
+  const home = vault();
+  ingestItems(home, [{ ...base, source: "heart", likedAt: "2026-01-01T00:00:00Z" }]);
+  const path = join(home, "items.json");
+  const before = readFileSync(path, "utf8");
+  const result = ingestItems(home, [{ ...base, source: "heart", likedAt: "2026-07-01T00:00:00Z" }]);
+  assert.equal(result.updated, 0);
+  assert.equal(result.unchanged, 1);
+  assert.equal(readFileSync(path, "utf8"), before);
+});
+
 test("empty source views sort by source save time, newest first", () => {
   const items = [
     { ...base, id: "old", sources: ["bookmark"], savedAt: "2026-07-02T00:00:00Z", bookmarkedAt: "2026-01-01T00:00:00Z" },

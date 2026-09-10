@@ -1,7 +1,7 @@
 {
   "name": "Momento",
   "short_name": "Momento",
-  "description": "Remember everything you heart, bookmark, or share from X.",
+  "description": "Watch bookmarks from X, the app, or share sheet and write them back to you.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

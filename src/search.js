@@ -1,5 +1,7 @@
 import { loadItems } from "./store.js";
 
+const searchDocuments = new WeakMap();
+
 const STOP_WORDS = new Set([
   "a",
   "about",
@@ -43,9 +45,16 @@ export function searchItems(items, query, options = {}) {
     (item) => !source || item.sources?.includes(source),
   );
 
+  if (!normalizedQuery) {
+    const ordered = source
+      ? [...candidates].sort((a, b) => sortDate(b, source) - sortDate(a, source))
+      : candidates;
+    return ordered.slice(offset, offset + limit).map((item) => ({ ...item, score: 1 }));
+  }
+
   const scored = candidates
     .map((item) => ({ item, score: scoreItem(item, normalizedQuery, tokens) }))
-    .filter(({ score }) => !normalizedQuery || score > 0)
+    .filter(({ score }) => score > 0)
     .sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score;
       return sortDate(b.item, source) - sortDate(a.item, source);
@@ -79,18 +88,7 @@ export function statsVault(home) {
 }
 
 function scoreItem(item, phrase, tokens) {
-  if (!phrase) return 1;
-
-  const text = normalize(item.text || "");
-  const author = normalize(
-    `${item.author?.displayName || ""} ${item.author?.handle || ""}`,
-  );
-  const links = normalize(
-    (item.links || [])
-      .map((entry) => `${entry.title || ""} ${entry.expandedUrl || entry.url || ""}`)
-      .join(" "),
-  );
-  const full = `${author} ${text} ${links}`;
+  const { text, author, links, full, words } = searchDocument(item);
   let score = 0;
 
   if (text.includes(phrase)) score += 20;
@@ -101,11 +99,31 @@ function scoreItem(item, phrase, tokens) {
     if (author.includes(token)) score += 7;
     if (text.includes(token)) score += 5;
     if (links.includes(token)) score += 3;
-    if (full.split(/\s+/).some((word) => word.startsWith(token))) score += 1;
+    if (words.some((word) => word.startsWith(token))) score += 1;
   }
 
   if (tokens.length > 1 && tokens.every((token) => full.includes(token))) score += 8;
   return score;
+}
+
+function searchDocument(item) {
+  const cached = searchDocuments.get(item);
+  if (cached) return cached;
+  const extracted = item.extraction || {};
+  const text = normalize(`${item.text || ""} ${extracted.title || ""} ${extracted.excerpt || ""} ${extracted.text || ""}`);
+  const author = normalize(
+    `${item.author?.displayName || ""} ${item.author?.handle || ""} ${extracted.site || ""}`,
+  );
+  const links = normalize(
+    [
+      extracted.url || "",
+      ...(item.links || []).map((entry) => `${entry.title || ""} ${entry.expandedUrl || entry.url || ""}`),
+    ].join(" "),
+  );
+  const full = `${author} ${text} ${links}`;
+  const document = { text, author, links, full, words: full.split(/\s+/) };
+  searchDocuments.set(item, document);
+  return document;
 }
 
 function tokenize(value) {

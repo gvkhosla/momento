@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "momento",
-  "version": "0.3.3",
-  "description": "Sync X Hearts and Bookmarks into your searchable Momento archive.",
+  "version": "0.4.0",
+  "description": "Watch X bookmarks, extract linked articles, and feed your daily Momento brief.",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -15,7 +15,8 @@
     "webRequest",
     "tabs",
     "declarativeNetRequest",
-    "storage"
+    "storage",
+    "webNavigation"
   ],
   "host_permissions": [
     "https://x.com/*",

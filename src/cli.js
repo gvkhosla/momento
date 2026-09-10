@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir, networkInterfaces } from "node:os";
 import { join, resolve } from "node:path";
 import { answerWithLocalModel } from "./answer.js";
+import { buildBrief } from "./brief.js";
+import { loadSettings, saveSettings } from "./config.js";
 import { deepSearchVault, deepSetupMessage } from "./deep-search.js";
+import { enrichVault } from "./enrich.js";
+import { refreshIndex } from "./index-vault.js";
+import { sendBriefEmail, speakBrief } from "./mail.js";
+import { launchAgentInstalled, launchAgentPath, writeLaunchAgent } from "./install.js";
+import { startScheduler } from "./scheduler.js";
 import { createServer } from "./server.js";
 import { searchVault, statsVault } from "./search.js";
 import {
@@ -14,17 +22,22 @@ import {
 } from "./store.js";
 import { DEMO_ITEMS } from "./seed.js";
 
-const VERSION = "0.3.3";
+const VERSION = "0.4.0";
 
 function printHelp() {
-  console.log(`momento ${VERSION} — remember what you saved on X
+  console.log(`momento ${VERSION} — remember what you bookmarked
 
 Usage:
-  momento serve [--port 4177] [--home DIR]   Start the app + sync API
+  momento serve [--port 4177] [--home DIR]   Start the app, sync API, and daily bot
   momento phone [--port 4177]                Open a secure phone tunnel
   momento search <query> [--source TYPE]     Instant local keyword search
   momento search <query> --deep              QMD hybrid lexical + vector search
   momento ask <question> [--deep]            Answer from saved posts locally
+  momento enrich [--limit N]                 Extract linked articles from bookmarks
+  momento index                              Refresh the QMD vector index
+  momento brief [--send] [--speak FILE]      Build today's brief now
+  momento configure --email you@domain       Save daily-brief settings
+  momento install                            Keep the bot alive after logout
   momento deep-setup                         Print the private QMD setup steps
   momento repair-order --source TYPE         Repair pre-v0.3 crawl ordering
   momento stats [--home DIR]                 Archive counts
@@ -34,22 +47,44 @@ Usage:
   momento open [--home DIR]                  Open vault in Finder
 
 Sources: all, bookmark, heart, shared
-Local answers use llama-cli and MOMENTO_MODEL (a GGUF instruct model).
+Daily briefs email via Resend. Put your real key in .env:
+  RESEND_API_KEY=re_xxxxxxxxx   # replace with your real API key
 
 Quick start:
-  momento seed
+  momento configure --email geetkhosla@gmail.com
   momento serve
   open http://localhost:4177
 `);
 }
 
+function loadDotEnv() {
+  const files = [join(process.cwd(), ".env"), join(homedir(), ".momento.env")];
+  for (const file of files) {
+    if (!existsSync(file)) continue;
+    for (const line of readFileSync(file, "utf8").split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eq = trimmed.indexOf("=");
+      if (eq < 1) continue;
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      if (process.env[key] === undefined) process.env[key] = value;
+    }
+  }
+}
+
+loadDotEnv();
+
 function parseArgs(argv) {
   const args = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    if (["--home", "--port", "--source", "--token", "--model", "--limit", "--collection"].includes(arg)) {
+    if (["--home", "--port", "--source", "--token", "--model", "--limit", "--collection", "--email", "--from", "--hour", "--speak"].includes(arg)) {
       args[arg.slice(2)] = argv[++i];
-    } else if (["--deep", "--rerank"].includes(arg)) {
+    } else if (["--deep", "--rerank", "--send", "--skip-model"].includes(arg)) {
       args[arg.slice(2)] = true;
     } else if (arg.startsWith("--") && arg.includes("=")) {
       const [key, value] = arg.slice(2).split(/=(.*)/s);
@@ -107,6 +142,69 @@ async function main() {
 
   if (command === "deep-setup") {
     console.log(deepSetupMessage(home));
+    return;
+  }
+
+  if (command === "configure" || command === "config") {
+    const settings = saveSettings(home, {
+      email: args.email,
+      fromEmail: args.from,
+      briefHour: args.hour,
+    });
+    console.log(`Email: ${settings.email || "(unset)"}`);
+    console.log(`From: ${settings.fromEmail || "Momento <onboarding@resend.dev>"}`);
+    console.log(`Sends around ${String(settings.briefHour).padStart(2, "0")}:${String(settings.briefMinute).padStart(2, "0")} ${settings.timezone}`);
+    console.log(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== "re_xxxxxxxxx"
+      ? "Resend: configured"
+      : "Resend: replace re_xxxxxxxxx in .env with your real API key");
+    return;
+  }
+
+  if (command === "enrich") {
+    const result = await enrichVault(home, {
+      limit: Number(args.limit || 40),
+      index: true,
+    });
+    console.log(`Enrichment: ${result.ready} ready · ${result.failed} failed · ${result.skipped} skipped · ${result.seen} pending`);
+    if (result.indexed) console.log("Vector index refreshed.");
+    return;
+  }
+
+  if (command === "index") {
+    const result = await refreshIndex(home);
+    console.log(`Indexed collection ${result.collection}`);
+    return;
+  }
+
+  if (command === "install") {
+    const dest = writeLaunchAgent({ home, port: Number(args.port || process.env.MOMENTO_PORT || 4177) });
+    console.log(`Wrote ${dest}`);
+    console.log("Load it with:");
+    console.log(`  launchctl unload ${dest} 2>/dev/null || true`);
+    console.log(`  launchctl load ${dest}`);
+    console.log("Momento will start at login and keep extracting / briefing in the background.");
+    return;
+  }
+
+  if (command === "brief") {
+    const brief = await buildBrief(home, {
+      skipModel: Boolean(args["skip-model"]),
+      model: args.model,
+    });
+    console.log(`${brief.date} · ${brief.headline}`);
+    console.log(brief.summary);
+    for (const insight of brief.insights) console.log(`- ${insight}`);
+    if (args.send) {
+      const sent = await sendBriefEmail(home, brief);
+      console.log(`Emailed ${sent.to}`);
+    } else {
+      const settings = loadSettings(home);
+      console.log(`Would email ${settings.email} via Resend. Add --send when RESEND_API_KEY is set.`);
+    }
+    if (args.speak) {
+      const dest = await speakBrief(brief, args.speak);
+      console.log(`Podcast audio: ${dest}`);
+    }
     return;
   }
 
@@ -186,7 +284,10 @@ function startServer(home, port, token) {
     }
     throw error;
   });
-  server.listen(port, "0.0.0.0", () => printServerReady(home, port));
+  server.listen(port, "0.0.0.0", () => {
+    printServerReady(home, port);
+    startScheduler(home);
+  });
 }
 
 async function ensureServer(home, port) {
@@ -243,9 +344,19 @@ function startTunnel(port, phoneToken) {
 }
 
 function printServerReady(home, port) {
+  const settings = loadSettings(home);
   console.log(`Momento is ready: http://localhost:${port}`);
   for (const ip of lanAddresses()) console.log(`Phone on this Wi-Fi: http://${ip}:${port}`);
   console.log(`Vault: ${home}`);
+  if (settings.email) {
+    console.log(`Daily brief → ${settings.email} around ${String(settings.briefHour).padStart(2, "0")}:00 ${settings.timezone}`);
+  } else {
+    console.log("Daily brief is local until you run: momento configure --email you@domain.com");
+  }
+  if (!launchAgentInstalled()) {
+    console.log("To keep this running after you close the terminal: momento install");
+    console.log(`(writes ${launchAgentPath()})`);
+  }
   console.log("For a secure phone URL: momento phone");
 }
 

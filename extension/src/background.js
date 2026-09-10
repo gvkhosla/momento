@@ -3,19 +3,43 @@ import { transformItem } from "./transform.js";
 import { fetchTimeline } from "./xapi.js";
 
 const SERVER_URL = "http://127.0.0.1:4177";
-const BATCH_SIZE = 50;
-const EARLY_EXIT_THRESHOLD = 100;
+const BATCH_SIZE = 250;
+const EARLY_EXIT_THRESHOLD = 8;
 const AUTO_SYNC_ALARM = "momento-auto-sync";
+const DEBOUNCE_MS = 8_000;
 
 installSniffer();
 installHeaderRule();
 ensureAutoSyncAlarm();
 
 chrome.runtime.onStartup.addListener(ensureAutoSyncAlarm);
+chrome.runtime.onInstalled.addListener(() => {
+  ensureAutoSyncAlarm();
+  scheduleBookmarkSync("install");
+});
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== AUTO_SYNC_ALARM) return;
-  runAutomaticSync().catch((error) => console.warn("Automatic Momento sync skipped", error));
+  runAutomaticSync(["bookmark"]).catch((error) => console.warn("Automatic Momento sync skipped", error));
 });
+
+chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+  if (changeInfo.status !== "complete") return;
+  if (isBookmarkSurface(tab?.url)) scheduleBookmarkSync("tab");
+});
+
+chrome.webNavigation?.onHistoryStateUpdated?.addListener((details) => {
+  if (details.frameId !== 0) return;
+  if (isBookmarkSurface(details.url)) scheduleBookmarkSync("navigate");
+});
+
+chrome.webRequest.onCompleted.addListener(
+  (details) => {
+    if (details.statusCode >= 400) return;
+    scheduleBookmarkSync("graphql");
+  },
+  { urls: ["https://x.com/i/api/graphql/*/Bookmarks*"] },
+);
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== "sync") return;
@@ -23,7 +47,7 @@ chrome.runtime.onConnect.addListener((port) => {
   port.onMessage.addListener(async (message) => {
     if (message.type !== "start") return;
     try {
-      await runSync(message.sources || ["bookmark", "heart"], send);
+      await runSync(message.sources || ["bookmark"], send);
     } catch (error) {
       send({ type: "error", text: String(error?.message || error) });
     }
@@ -31,19 +55,38 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 let syncInProgress = false;
+let pendingTimer = 0;
+let pendingReason = "";
 
 function ensureAutoSyncAlarm() {
   chrome.alarms.create(AUTO_SYNC_ALARM, {
-    delayInMinutes: 60,
-    periodInMinutes: 60,
+    delayInMinutes: 2,
+    periodInMinutes: 5,
   });
 }
 
-async function runAutomaticSync() {
+function isBookmarkSurface(url) {
+  return /https?:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/i\/bookmarks/i.test(String(url || ""));
+}
+
+function scheduleBookmarkSync(reason) {
+  pendingReason = reason;
+  if (pendingTimer) clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(() => {
+    pendingTimer = 0;
+    runAutomaticSync(["bookmark"]).catch((error) => {
+      console.warn(`Momento bookmark sync (${pendingReason}) skipped`, error);
+    });
+  }, DEBOUNCE_MS);
+}
+
+async function runAutomaticSync(preferred) {
   if (syncInProgress || !(await pingServer()) || !(await hasXSession())) return;
   const sources = [];
-  if (await getCapturedConfig("bookmark")) sources.push("bookmark");
-  if (await getCapturedConfig("heart")) sources.push("heart");
+  const wanted = preferred || ["bookmark"];
+  if (wanted.includes("bookmark") && (await getCapturedConfig("bookmark"))) sources.push("bookmark");
+  if (wanted.includes("heart") && (await getCapturedConfig("heart"))) sources.push("heart");
+  if (sources.length === 0 && wanted.includes("bookmark")) sources.push("bookmark");
   if (sources.length === 0) return;
   await runSync(sources, () => {});
 }
@@ -102,8 +145,6 @@ async function syncSource(source, send) {
   };
 
   for await (const raw of fetchTimeline(config, source, { onLog })) {
-    // X timelines arrive newest-save first. Preserve that ordering even though
-    // X does not expose an exact bookmarked/liked timestamp.
     const savedAt = new Date(syncStartedAt - sourcePosition).toISOString();
     sourcePosition += 1;
     const item = transformItem(raw, source, { savedAt });

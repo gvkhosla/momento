@@ -10,6 +10,10 @@ export function toMarkdown(item) {
     liked_at: item.likedAt || "",
     bookmarked_at: item.bookmarkedAt || "",
     shared_at: item.sharedAt || "",
+    extracted_url: item.extraction?.url || "",
+    extracted_title: item.extraction?.title || "",
+    extracted_site: item.extraction?.site || "",
+    extracted_status: item.extraction?.status || "",
   };
 
   const yaml = Object.entries(fm)
@@ -38,9 +42,12 @@ export function toMarkdown(item) {
     )
     .join("\n");
 
+  const extracted = item.extraction?.status === "ready" ? formatExtraction(item.extraction) : "";
+
   const parts = [text];
   if (media) parts.push(media);
   if (links) parts.push(`## Links\n\n${links}`);
+  if (extracted) parts.push(extracted);
 
   return `---\n${yaml}\n---\n\n${parts.filter(Boolean).join("\n\n")}\n`;
 }
@@ -52,6 +59,17 @@ export function slugName(item) {
     .slice(0, 32);
   const date = String(item.postedAt || item.savedAt || "").slice(0, 10) || "undated";
   return `${date}-${handle}-${item.id}`;
+}
+
+function formatExtraction(extraction) {
+  const lines = [
+    `## ${extraction.title || "Extracted article"}`,
+    extraction.site ? `_${extraction.site}_` : "",
+    extraction.url ? `[${extraction.url}](${extraction.url})` : "",
+    extraction.excerpt || "",
+    extraction.text && extraction.text !== extraction.excerpt ? extraction.text : "",
+  ];
+  return lines.filter(Boolean).join("\n\n");
 }
 
 function yamlScalar(value) {

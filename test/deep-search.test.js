@@ -28,11 +28,11 @@ test("answer prompt requires grounded citations", () => {
   assert.match(prompt, /https:\/\/x\.com\/example\/status\/123/);
 });
 
-test("deep setup is explicit and never silently indexes", () => {
+test("deep setup points at the Momento-managed QMD collection", () => {
   const message = deepSetupMessage("/tmp/momento-vault");
   assert.match(message, /qmd collection add/);
-  assert.match(message, /qmd embed/);
-  assert.match(message, /manually managed QMD index/);
+  assert.match(message, /momento index/i);
+  assert.match(message, /Momento QMD collection/);
 });
 
 test("deep search maps QMD files back to Momento records", async () => {

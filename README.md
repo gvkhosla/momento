@@ -1,20 +1,21 @@
 # momento
 
-> Remember everything you heart, bookmark, or share from X.
+> Watch the bookmarks. Extract the work. Write back every morning.
 
 ![Momento — three polaroids: you liked this, don't trust X search, find it later.](./assets/momento.png)
 
 <p align="center"><sub>Like the film: you won't remember. Write it down.<br/>Not affiliated with <i>Memento</i> (2000) — just stealing the bit about external memory.</sub></p>
 
-Momento brings **X Hearts + Bookmarks** into one searchable archive without flattening the distinction. The same tweet can be both; it still appears once.
+Momento keeps an eye on **X Bookmarks only**. Hearts can still be stored, but they do not drive the product.
 
-- Mobile-first web app
-- Chrome extension for initial bulk sync and hourly incremental refresh
-- Add a tweet from your phone by URL or share target
-- Natural keyword recall: `that tweet about pricing`
-- Optional QMD hybrid lexical + semantic search
+Every bookmark is expanded: the tweet, the outbound link, the article text, images, and a vector index. Then Momento comes to you — a daily brief in the app, in your email, and as a spoken script.
+
+- Chrome extension for the first bookmark sync and hourly refresh
+- Article extraction into the local vault
+- Automatic QMD lexical + vector index
+- Daily brief, insights, and podcast script
+- Optional email via Resend
 - Grounded local answers with citations via llama.cpp
-- Reverse-chronological source timelines
 - Plain markdown mirror for Obsidian and local agents
 - Local-first: browser cookies never leave the extension
 
@@ -36,25 +37,52 @@ Requires Node 20+ and Chrome/Arc/Brave/Edge.
 git clone https://github.com/gvkhosla/momento.git
 cd momento
 npm link
-momento seed      # optional demo archive
+momento configure --email you@domain.com
 momento serve
 ```
 
 Open [http://localhost:4177](http://localhost:4177).
 
-## Sync X Hearts + Bookmarks
+To email the brief, copy `.env.example` to `.env` and replace `re_xxxxxxxxx` with your real Resend API key:
 
-1. Download `momento-extension-v0.3.3.zip` from the [latest release](https://github.com/gvkhosla/momento/releases/latest) and unzip it—or use the local `momento/extension` folder
+```bash
+cp .env.example .env
+# edit .env: RESEND_API_KEY=re_xxxxxxxxx  →  your real key
+```
+
+## Sync X Bookmarks
+
+1. Download `momento-extension-v0.4.0.zip` from the [latest release](https://github.com/gvkhosla/momento/releases/latest) and unzip it—or use the local `momento/extension` folder
 2. Open `chrome://extensions`
 3. Enable **Developer mode**
 4. **Load unpacked** → select the unzipped extension folder
 5. Stay signed in at [x.com](https://x.com)
 6. Open the Momento extension
-7. Select **Bookmarks**, **Hearts**, or both → **Sync selected**
+7. Leave **Bookmarks** checked → **Sync selected**
 
-The first sync is explicit because Momento must capture X's current private GraphQL configuration from your signed-in browser. After a source has synced successfully, the extension checks it hourly whenever the browser is signed in and `momento serve` is running. It exits after 100 already-known items, so later refreshes are incremental rather than full crawls.
+The first sync is explicit because Momento must capture X's current private GraphQL configuration from your signed-in browser. After bookmarks have synced once, the extension watches X. Saving a bookmark, opening `/i/bookmarks`, or waiting a few minutes is enough — new items land in the vault, get extracted, and show up in Today. Incremental syncs stop after a handful of already-known items.
 
-If X config capture fails, open your Hearts or Bookmarks page once, let it load, then retry. X cookies remain inside the extension; only normalized tweet records are written to the local Momento API.
+New bookmarks are extracted in the background: Momento follows the outbound link, stores the article, downloads the hero image when it can, and refreshes the vector index.
+
+If X config capture fails, open your Bookmarks page once, let it load, then retry. X cookies remain inside the extension; only normalized records are written to the local Momento API.
+
+## Daily brief
+
+While `momento serve` is running, Momento:
+
+1. Extracts any unread bookmark links
+2. Rebuilds the QMD index when new article text lands
+3. Writes today's brief after your configured local hour
+4. Emails it when `RESEND_API_KEY` and an address are set
+
+```bash
+momento configure --email you@domain.com --hour 7
+momento brief              # write today's brief now
+momento brief --send       # write and email it
+momento brief --speak ~/Desktop/momento.m4a
+```
+
+The app home screen is the brief, not the search box. Search and Ask are still there when you want them.
 
 ## Use it on your phone
 
@@ -68,8 +96,8 @@ Open the printed HTTPS URL on your phone. Keep the terminal open.
 
 From there you can:
 
-- Search your whole archive
-- Filter Bookmarks, Hearts, and Shared items
+- Read today's brief
+- Search extracted bookmarks
 - Add an X URL directly
 - Install Momento to your Home Screen
 - Share into Momento on browsers that support PWA share targets
@@ -80,41 +108,38 @@ Your archive still lives at `~/momento-vault`; the tunnel only exposes the runni
 
 ## Search and local answers
 
-Instant keyword search remains the default:
+Instant keyword search remains available and now includes extracted article text:
 
 ```bash
-momento search "the thread about usage pricing"
+momento search "the thread about pricing"
 momento search "design systems" --source bookmark
 ```
 
-Optional deep search uses QMD's BM25 + vector retrieval and rank fusion. Momento does not index private files or download models automatically:
+Deep search uses QMD's BM25 + vector retrieval. Momento creates and refreshes the collection after extraction:
 
 ```bash
-momento deep-setup
-
-# Run the printed commands yourself once, then:
+momento index
 momento search "charging customers based on usage" --deep
 ```
 
-`--deep` sends a structured `lex` + `vec` query to QMD and skips query expansion and reranking by default, keeping the optional footprint to the embedding model. Add `--rerank` when you want slower local reranking.
+`--deep` sends a structured `lex` + `vec` query to QMD and skips query expansion and reranking by default. Add `--rerank` when you want slower local reranking.
 
-The web app has two explicit recall modes:
+The web app has three modes:
 
-- **Search** finds and shows the right bookmarks, hearts, and shared posts instantly.
-- **Answer** retrieves the strongest posts first, synthesizes only from that evidence with a local GGUF model, and displays the exact reference cards it used.
-
-The same local answer engine is available from the CLI:
+- **Today** is the daily brief.
+- **Search** finds bookmarks and extracted articles.
+- **Ask** retrieves the strongest items first, synthesizes only from that evidence with a local GGUF model, and displays the exact reference cards it used.
 
 ```bash
 brew install llama.cpp
 export MOMENTO_MODEL=~/models/your-instruct-model.gguf
-momento ask "What patterns have I saved about reliable agents?"
-momento ask "Summarize what I saved about pricing" --source bookmark
+momento ask "What patterns have I bookmarked about reliable agents?"
 ```
 
 Momento automatically chooses the smallest `.gguf` in `~/models` when `MOMENTO_MODEL` is unset. QMD is preferred for evidence when configured; otherwise `ask` falls back to keyword evidence.
 
 ```bash
+momento enrich --limit 40
 momento stats
 momento path
 momento open
@@ -122,7 +147,7 @@ momento open
 
 ## What is stored
 
-Each unique tweet becomes one markdown file:
+Each unique tweet becomes one markdown file. When the outbound article is extracted, that text is appended:
 
 ```markdown
 ---
@@ -132,12 +157,20 @@ author: "@paulg"
 author_name: Paul Graham
 date: 2025-03-12T14:22:00.000Z
 saved_at: 2026-07-28T08:30:00.000Z
-sources: ["heart", "bookmark"]
-liked_at: 2026-07-27T20:10:00.000Z
+sources: ["bookmark"]
 bookmarked_at: 2026-07-28T08:30:00.000Z
+extracted_title: Relentlessly resourceful
+extracted_site: paulgraham.com
+extracted_status: ready
 ---
 
 The best founders are relentlessly resourceful.
+
+## Relentlessly resourceful
+
+_paulgraham.com_
+
+[https://paulgraham.com/relres.html](https://paulgraham.com/relres.html)
 ```
 
 Archive layout:
@@ -146,7 +179,9 @@ Archive layout:
 ~/momento-vault/
 ├── items.json       # canonical merged archive
 ├── README.md
-└── by-id/           # agent/Obsidian-friendly markdown
+├── by-id/           # agent/Obsidian-friendly markdown
+├── briefs/          # daily brief json + markdown
+└── media/           # downloaded article images
 ```
 
 ## Phone capture
@@ -168,21 +203,26 @@ The temporary `trycloudflare.com` URL and pairing token change each time. A perm
 
 Drop [`skill/SKILL.md`](./skill/SKILL.md) into your agent skills directory. Then ask:
 
-> Find the tweet I bookmarked about usage-based pricing.
+> Find the article I bookmarked about usage-based pricing.
 
-The agent uses `momento search` or reads `~/momento-vault/by-id`.
+The agent uses `momento search` or reads `~/momento-vault/by-id`. For "what should I read," it should open `momento brief`.
 
 ## Commands
 
 | Command | Job |
 |---|---|
-| `momento serve` | Run the PWA and local sync API |
+| `momento serve` | Run the PWA, local sync API, extractor, and daily bot |
 | `momento phone` | Create a secure temporary phone URL |
 | `momento search <query>` | Instant keyword search |
 | `momento search <query> --deep` | QMD hybrid lexical + vector search |
-| `momento ask <question>` | Answer locally from cited saved posts |
-| `momento deep-setup` | Print manual QMD setup/refresh commands |
-| `momento repair-order --source TYPE` | Repair ordering from pre-v0.3 imports |
+| `momento ask <question>` | Answer from saved posts locally |
+| `momento enrich` | Extract linked articles from bookmarks |
+| `momento index` | Refresh the QMD vector index |
+| `momento brief [--send]` | Build today's brief, optionally email it |
+| `momento configure --email` | Save daily-brief settings |
+| `momento install` | Install a macOS LaunchAgent so the bot stays up |
+| `momento deep-setup` | Print QMD install steps |
+| `momento repair-order --source TYPE` | Repair pre-v0.3 crawl ordering |
 | `momento stats` | Count unique items and sources |
 | `momento seed` | Add four demo memories |
 | `momento clear-demo` | Remove demo memories |
@@ -196,7 +236,8 @@ The agent uses `momento search` or reads `~/momento-vault/by-id`.
 - Sync uses X's private web GraphQL endpoints, so X can change them
 - Momento sniffs live query IDs to reduce breakage
 - X omits exact save timestamps; Momento preserves the source timeline order using stable synthetic timestamps
-- QMD indexing and local model downloads are always explicit opt-ins
+- Article extraction fetches public pages from this machine
+- Email needs `RESEND_API_KEY`; nothing is sent until you set an address
 - Phone tunnels should be treated as temporary personal links
 
 ## Development

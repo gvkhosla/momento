@@ -4,9 +4,14 @@ import { createServer as createHttpServer } from "node:http";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateLocalAnswer } from "./answer.js";
+import { latestBrief, listBriefs, loadBrief } from "./brief.js";
 import { captureUrl } from "./capture.js";
+import { loadSettings, loadState, saveSettings } from "./config.js";
 import { deepSearchVault } from "./deep-search.js";
-import { searchItems, searchVault, statsVault } from "./search.js";
+import { enrichVault } from "./enrich.js";
+import { resendApiKey, sendBriefEmail } from "./mail.js";
+import { runDueJobs } from "./scheduler.js";
+import { searchItems, statsVault } from "./search.js";
 import {
   countSources,
   getKnownIds,
@@ -37,6 +42,22 @@ const MIME = {
 export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) {
   let phoneToken = "";
   let answering = false;
+  let qmdRetryAt = 0;
+
+  async function retrieveEvidence(question, source, limit) {
+    if (Date.now() >= qmdRetryAt) {
+      try {
+        const evidence = await deepSearchVault(home, question, { source, limit, timeout: 15_000 });
+        if (evidence.length > 0) return { evidence, retrieval: "qmd" };
+      } catch {
+        qmdRetryAt = Date.now() + 5 * 60_000;
+      }
+    }
+    return {
+      evidence: searchItems(loadItems(home), question, { source, limit }),
+      retrieval: "keyword",
+    };
+  }
 
   return createHttpServer(async (req, res) => {
     setCors(res);
@@ -71,11 +92,21 @@ export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) 
 
       if (req.method === "GET" && pathname === "/api/health") {
         const items = loadItems(home);
+        const settings = loadSettings(home);
+        const state = loadState(home);
         return json(res, 200, {
           ok: true,
           home,
           total: items.length,
           counts: countSources(items),
+          settings: publicSettings(settings),
+          state: {
+            lastBriefDate: state.lastBriefDate,
+            lastBriefAt: state.lastBriefAt,
+            lastEnrichAt: state.lastEnrichAt,
+            lastIndexAt: state.lastIndexAt,
+            lastEmailStatus: state.lastEmailStatus,
+          },
           protected: Boolean(token || (phoneToken && isTunnelRequest(req))),
         });
       }
@@ -84,14 +115,17 @@ export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) 
         const items = loadItems(home);
         const q = url.searchParams.get("q") || "";
         const source = url.searchParams.get("source") || "all";
-        const limit = url.searchParams.get("limit") || "100";
+        const requestedLimit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit") || 30)));
         const offset = url.searchParams.get("offset") || "0";
-        const results = searchItems(items, q, { source, limit, offset });
+        const page = searchItems(items, q, { source, limit: requestedLimit + 1, offset });
+        const hasMore = page.length > requestedLimit;
+        const results = page.slice(0, requestedLimit);
         return json(res, 200, {
           q,
           source,
-          results,
+          results: results.map(toListItem),
           total: results.length,
+          hasMore,
           counts: countSources(items),
         });
       }
@@ -100,21 +134,79 @@ export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) 
         return json(res, 200, statsVault(home));
       }
 
+      if (req.method === "GET" && pathname === "/api/settings") {
+        return json(res, 200, { settings: publicSettings(loadSettings(home)), state: loadState(home) });
+      }
+
+      if (req.method === "POST" && pathname === "/api/settings") {
+        const payload = await readPayload(req);
+        return json(res, 200, { settings: publicSettings(saveSettings(home, payload)) });
+      }
+
+      if (req.method === "GET" && pathname === "/api/brief") {
+        const date = url.searchParams.get("date");
+        const brief = date ? loadBrief(home, date) : latestBrief(home);
+        return json(res, 200, { brief, dates: listBriefs(home) });
+      }
+
+      if (req.method === "POST" && pathname === "/api/brief") {
+        const payload = await readPayload(req);
+        const report = await runDueJobs(home, {
+          force: true,
+          enrich: payload.enrich !== false,
+          email: Boolean(payload.email),
+          skipModel: payload.skipModel === true,
+          throwOnMail: true,
+        });
+        return json(res, 200, { ...report, brief: latestBrief(home) });
+      }
+
+      if (req.method === "POST" && pathname === "/api/brief/send") {
+        const brief = latestBrief(home);
+        if (!brief) return json(res, 404, { error: "No brief to send yet." });
+        const sent = await sendBriefEmail(home, brief);
+        return json(res, 200, sent);
+      }
+
+      if (req.method === "POST" && pathname === "/api/enrich") {
+        const payload = await readPayload(req);
+        const result = await enrichVault(home, {
+          limit: Math.min(80, Math.max(1, Number(payload.limit || 20))),
+          index: payload.index !== false,
+        });
+        return json(res, 200, result);
+      }
+
+      if (req.method === "POST" && pathname === "/api/retrieve") {
+        const payload = await readPayload(req);
+        const question = String(payload.question || "").trim();
+        if (!question) return json(res, 400, { error: "Ask a question first." });
+        const source = payload.source || "bookmark";
+        const limit = Math.min(10, Math.max(1, Number(payload.limit || 6)));
+        const { evidence, retrieval } = await retrieveEvidence(question, source, limit);
+        if (evidence.length === 0) {
+          return json(res, 404, { error: "Nothing in your archive matched that question." });
+        }
+        return json(res, 200, { references: evidence, retrieval });
+      }
+
       if (req.method === "POST" && pathname === "/api/ask") {
         if (answering) return json(res, 409, { error: "Momento is already answering another question." });
         const payload = await readPayload(req);
         const question = String(payload.question || "").trim();
         if (!question) return json(res, 400, { error: "Ask a question first." });
-        const source = payload.source || "all";
+        const source = payload.source || "bookmark";
         const limit = Math.min(10, Math.max(1, Number(payload.limit || 6)));
-        let retrieval = "qmd";
+        const referenceIds = Array.isArray(payload.referenceIds)
+          ? payload.referenceIds.map(String).slice(0, limit)
+          : [];
+        let retrieval = payload.retrieval || "keyword";
         let evidence;
-        try {
-          evidence = await deepSearchVault(home, question, { source, limit });
-          if (evidence.length === 0) throw new Error("No QMD matches");
-        } catch {
-          retrieval = "keyword";
-          evidence = searchVault(home, question, { source, limit });
+        if (referenceIds.length > 0) {
+          const byId = new Map(loadItems(home).map((item) => [item.id, item]));
+          evidence = referenceIds.map((id) => byId.get(id)).filter(Boolean);
+        } else {
+          ({ evidence, retrieval } = await retrieveEvidence(question, source, limit));
         }
         if (evidence.length === 0) {
           return json(res, 404, { error: "Nothing in your archive matched that question." });
@@ -124,7 +216,7 @@ export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) 
         try {
           const result = await generateLocalAnswer(question, evidence, {
             model: payload.model,
-            maxTokens: 420,
+            maxTokens: 260,
           });
           return json(res, 200, {
             answer: result.answer,
@@ -151,7 +243,15 @@ export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) 
             : Array.isArray(payload.bookmarks)
               ? payload.bookmarks
               : [];
-        return json(res, 200, ingestItems(home, items));
+        const result = ingestItems(home, items);
+        if (result.inserted > 0) {
+          queueMicrotask(() => {
+            enrichVault(home, { limit: Math.min(40, result.inserted + 8), index: true }).catch((error) => {
+              console.error(`Momento enrich after ingest: ${error?.message || error}`);
+            });
+          });
+        }
+        return json(res, 200, result);
       }
 
       if (req.method === "POST" && pathname === "/api/capture") {
@@ -205,6 +305,48 @@ export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) 
       return json(res, status, { error: message });
     }
   });
+}
+
+function toListItem(item) {
+  const text = String(item.text || "");
+  const extraction = item.extraction
+    ? {
+        status: item.extraction.status,
+        url: item.extraction.url,
+        title: item.extraction.title,
+        site: item.extraction.site,
+        excerpt: item.extraction.excerpt,
+        imageUrl: item.extraction.imageUrl,
+        kind: item.extraction.kind,
+      }
+    : null;
+  return {
+    id: item.id,
+    text: text.length > 900 ? `${text.slice(0, 900)}…` : text,
+    url: item.url,
+    author: item.author,
+    postedAt: item.postedAt,
+    savedAt: item.savedAt,
+    likedAt: item.likedAt,
+    bookmarkedAt: item.bookmarkedAt,
+    sharedAt: item.sharedAt,
+    sources: item.sources,
+    score: item.score,
+    extraction,
+  };
+}
+
+function publicSettings(settings) {
+  return {
+    email: settings.email || "",
+    fromEmail: settings.fromEmail || "",
+    briefHour: settings.briefHour,
+    briefMinute: settings.briefMinute,
+    lookbackHours: settings.lookbackHours,
+    includePodcast: settings.includePodcast !== false,
+    timezone: settings.timezone,
+    mailConfigured: Boolean(resendApiKey()),
+  };
 }
 
 function serveStatic(req, res, pathname) {

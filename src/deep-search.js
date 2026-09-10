@@ -65,7 +65,7 @@ export async function deepSearchVault(home, query, options = {}) {
 
 export function deepSetupMessage(home) {
   const collection = process.env.MOMENTO_QMD_COLLECTION || DEFAULT_COLLECTION;
-  return `Deep search needs a manually managed QMD index. Run:\n\n  bun install -g @tobilu/qmd\n  qmd collection add "${home}/by-id" --name ${collection} --mask '**/*.md'\n  qmd embed\n\nAfter future Momento syncs, refresh it manually with:\n\n  qmd update\n  qmd embed`;
+  return `Deep search uses the Momento QMD collection "${collection}". Install once:\n\n  bun install -g @tobilu/qmd\n  qmd collection add "${home}/by-id" --name ${collection} --mask '**/*.md'\n\nMomento refreshes embeddings after bookmark extraction. You can also run:\n\n  momento index`;
 }
 
 function parseJsonArray(value) {

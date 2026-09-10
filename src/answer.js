@@ -8,7 +8,7 @@ export function buildAnswerPrompt(question, items) {
     .map((item, index) => {
       const sources = (item.sources || []).join(", ");
       const fullText = String(item.text || "").trim();
-      const text = fullText.length > 1_600 ? `${fullText.slice(0, 1_600)}…` : fullText;
+      const text = fullText.length > 1_000 ? `${fullText.slice(0, 1_000)}…` : fullText;
       return `[${index + 1}] @${item.author?.handle || "unknown"} · ${String(item.postedAt || "").slice(0, 10)} · ${sources}\n${text}\n${item.url}`;
     })
     .join("\n\n");
@@ -16,7 +16,7 @@ export function buildAnswerPrompt(question, items) {
   return `You are Momento, an answer engine over one person's saved X posts.
 Answer the question using only the evidence below.
 If the evidence is insufficient, say so plainly; never invent facts.
-Be concise: use at most eight sentences before the Sources line.
+Be concise: use at most four sentences before the Sources line.
 Synthesize patterns instead of listing every post.
 Cite factual claims with source numbers like [1] or [2].
 End with a short "Sources" line containing the cited X URLs.
@@ -73,9 +73,9 @@ export async function generateLocalAnswer(question, items, options = {}) {
     "-m",
     model,
     "--ctx-size",
-    "8192",
+    "4096",
     "--predict",
-    String(options.maxTokens || 420),
+    String(options.maxTokens || 300),
     "--temp",
     "0.2",
     "--top-p",
