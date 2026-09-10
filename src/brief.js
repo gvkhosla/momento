@@ -40,6 +40,8 @@ export async function buildBrief(home, options = {}) {
     references: evidence.map(toCard),
     podcastScript: generated.podcastScript,
     retrieval: insights.some((item) => item.retrieval === "qmd") ? "qmd" : "keyword",
+    newCount: recent.length,
+    rereadCount: Math.max(0, evidence.length - recent.length),
   };
   writeBrief(home, brief);
   return brief;

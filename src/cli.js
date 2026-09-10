@@ -208,6 +208,7 @@ async function main() {
       model: args.model,
     });
     console.log(`${brief.date} · ${brief.headline}`);
+    console.log(`${brief.newCount ?? 0} new · ${brief.rereadCount ?? 0} reread`);
     console.log(brief.summary);
     for (const insight of brief.insights) console.log(`- ${insight}`);
     if (args.send) {
