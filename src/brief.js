@@ -24,7 +24,10 @@ export async function buildBrief(home, options = {}) {
   const corpus = loadItems(home).filter((item) => item.sources?.includes("bookmark"));
   const insights = await gatherInsights(home, corpus, recent, options);
   const evidence = uniqueById([...recent, ...insights]).slice(0, 10);
-  const generated = await synthesizeBrief({ dateKey, recent, insights: evidence, lookbackHours }, options);
+  const generated = await synthesizeBrief(
+    { dateKey, recent, insights: evidence, lookbackHours, corpusCount: corpus.length },
+    options,
+  );
   const brief = {
     id: dateKey,
     date: dateKey,
@@ -143,9 +146,21 @@ function parseGeneratedBrief(answer, fallback) {
   };
 }
 
+function corpusEmpty(context) {
+  return Number(context.corpusCount || 0) === 0 && !(context.recent || []).length && !(context.insights || []).length;
+}
+
 function fallbackBrief(context) {
   const recent = context.recent;
   const insights = context.insights;
+  if (corpusEmpty(context)) {
+    return {
+      headline: "Vault is empty",
+      summary: "Save a bookmark or run momento capture <url>. Momento can only brief what you have kept.",
+      insights: ["Nothing is in the vault yet."],
+      podcastScript: "The vault is empty. Capture a link or sync bookmarks, then come back tomorrow.",
+    };
+  }
   if (recent.length === 0) {
     const top = insights[0];
     return {

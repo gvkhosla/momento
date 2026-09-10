@@ -43,6 +43,12 @@ test("captureUrl accepts a normal article URL", async () => {
   assert.match(result.item.text, /usage-based pricing/);
 });
 
+test("captureUrl stores skipped extraction so enrich does not retry forever", async () => {
+  const home = mkdtempSync(join(tmpdir(), "momento-skip-"));
+  const result = await captureUrl(home, "https://instagram.com/p/abc", "bookmark", { index: false });
+  assert.equal(result.item.extraction?.status, "skipped");
+});
+
 test("pickExtractUrl ignores tweet permalinks and uses the outbound link", () => {
   const url = pickExtractUrl({
     text: "see this https://t.co/abc",
