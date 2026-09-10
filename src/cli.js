@@ -5,7 +5,7 @@ import { homedir, networkInterfaces } from "node:os";
 import { join, resolve } from "node:path";
 import { answerWithLocalModel } from "./answer.js";
 import { buildBrief } from "./brief.js";
-import { loadSettings, saveSettings } from "./config.js";
+import { loadSettings, loadState, saveSettings } from "./config.js";
 import { deepSearchVault, deepSetupMessage } from "./deep-search.js";
 import { enrichVault } from "./enrich.js";
 import { refreshIndex } from "./index-vault.js";
@@ -23,7 +23,7 @@ import {
 } from "./store.js";
 import { DEMO_ITEMS } from "./seed.js";
 
-const VERSION = "0.4.0";
+const VERSION = "0.4.1";
 
 function printHelp() {
   console.log(`momento ${VERSION} — remember what you bookmarked
@@ -43,6 +43,7 @@ Usage:
   momento deep-setup                         Print the private QMD setup steps
   momento repair-order --source TYPE         Repair pre-v0.3 crawl ordering
   momento stats [--home DIR]                 Archive counts
+  momento status [--home DIR]                Last enrich / brief / email
   momento seed [--home DIR]                  Load demo items
   momento clear-demo [--home DIR]            Remove demo items
   momento path [--home DIR]                  Print vault directory
@@ -141,6 +142,18 @@ async function main() {
     console.log(`extract ${ex.ready || 0} ready · ${ex.pending || 0} pending · ${ex.failed || 0} failed · ${ex.skipped || 0} skipped`);
     if (stats.newest) console.log(`${stats.oldest} → ${stats.newest}`);
     console.log(home);
+    return;
+  }
+
+  if (command === "status") {
+    const settings = loadSettings(home);
+    const state = loadState(home);
+    console.log(`momento ${VERSION}`);
+    console.log(`vault ${home}`);
+    console.log(`brief ${settings.briefHour}:${String(settings.briefMinute).padStart(2, "0")} ${settings.timezone}`);
+    console.log(`last enrich ${state.lastEnrichAt || "never"}`);
+    console.log(`last brief ${state.lastBriefAt || "never"}${state.lastBriefDate ? ` (${state.lastBriefDate})` : ""}`);
+    console.log(`last email ${state.lastEmailAt || "never"}${state.lastEmailStatus ? ` ${state.lastEmailStatus}` : ""}`);
     return;
   }
 

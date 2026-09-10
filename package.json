@@ -1,6 +1,6 @@
 {
   "name": "momento",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Watch X bookmarks, extract the linked work, and send a daily brief.",
   "type": "module",
   "bin": {
