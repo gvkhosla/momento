@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { searchItems } from "../src/search.js";
+import { searchItems, statsVault } from "../src/search.js";
 import {
   ingestItems,
   loadItems,
@@ -62,6 +62,19 @@ test("article body ranks above tweet chrome", () => {
   };
   const results = searchItems([tweet, article], "usage-based pricing");
   assert.equal(results[0].id, "article");
+});
+
+test("stats count extraction pipeline", () => {
+  const home = vault();
+  ingestItems(home, [
+    { ...base, id: "ready", source: "bookmark", extraction: { status: "ready" } },
+    { ...base, id: "fail", source: "bookmark", extraction: { status: "failed" } },
+    { ...base, id: "heart", source: "heart" },
+  ]);
+  const stats = statsVault(home);
+  assert.equal(stats.extraction.ready, 1);
+  assert.equal(stats.extraction.failed, 1);
+  assert.equal(stats.counts.heart, 1);
 });
 
 test("natural query ignores filler words", () => {

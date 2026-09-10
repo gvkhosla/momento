@@ -12,6 +12,7 @@ Momento watches X Bookmarks, extracts the linked article, indexes it, and writes
 ```bash
 momento path
 momento stats
+momento capture https://example.com/post
 momento search "query" --source bookmark
 momento search "half-remembered idea" --deep
 momento ask "What patterns did I bookmark about this?"

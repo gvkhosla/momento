@@ -137,6 +137,8 @@ async function main() {
     const stats = statsVault(home);
     console.log(`${stats.counts.all} unique items`);
     console.log(`${stats.counts.bookmark} bookmarks · ${stats.counts.heart} hearts · ${stats.counts.shared} shared`);
+    const ex = stats.extraction || {};
+    console.log(`extract ${ex.ready || 0} ready · ${ex.pending || 0} pending · ${ex.failed || 0} failed · ${ex.skipped || 0} skipped`);
     if (stats.newest) console.log(`${stats.oldest} → ${stats.newest}`);
     console.log(home);
     return;

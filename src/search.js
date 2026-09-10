@@ -79,9 +79,18 @@ export function statsVault(home) {
     }
   }
 
+  const extraction = { ready: 0, pending: 0, failed: 0, skipped: 0, none: 0 };
+  for (const item of items) {
+    if (!item.sources?.includes("bookmark")) continue;
+    const status = item.extraction?.status || "pending";
+    if (status in extraction) extraction[status] += 1;
+    else extraction.pending += 1;
+  }
+
   return {
     count: items.length,
     counts,
+    extraction,
     oldest: dates[0]?.slice(0, 10) || null,
     newest: dates.at(-1)?.slice(0, 10) || null,
   };

@@ -256,12 +256,16 @@ export function createServer({ home, token = process.env.MOMENTO_TOKEN || "" }) 
 
       if (req.method === "POST" && pathname === "/api/capture") {
         const payload = await readPayload(req);
-        const result = await captureUrl(
-          home,
-          payload.url || payload.text,
-          payload.source || "bookmark",
-        );
-        return json(res, 200, result);
+        try {
+          const result = await captureUrl(
+            home,
+            payload.url || payload.text,
+            payload.source || "bookmark",
+          );
+          return json(res, 200, result);
+        } catch (error) {
+          return json(res, 400, { error: String(error?.message || error) });
+        }
       }
 
       if ((req.method === "POST" || req.method === "GET") && pathname === "/share") {
