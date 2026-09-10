@@ -40,6 +40,30 @@ test("real sync removes demo memories", () => {
   assert.deepEqual(loadItems(home).map((item) => item.id), ["real"]);
 });
 
+test("article body ranks above tweet chrome", () => {
+  const tweet = {
+    ...base,
+    id: "tweet",
+    text: "just a like",
+    sources: ["bookmark"],
+    savedAt: base.postedAt,
+  };
+  const article = {
+    ...base,
+    id: "article",
+    text: "saved this",
+    sources: ["bookmark"],
+    savedAt: base.postedAt,
+    extraction: {
+      status: "ready",
+      title: "Usage-based pricing",
+      text: "The meter has to be obvious or buyers will not trust usage-based pricing.",
+    },
+  };
+  const results = searchItems([tweet, article], "usage-based pricing");
+  assert.equal(results[0].id, "article");
+});
+
 test("natural query ignores filler words", () => {
   const results = searchItems(
     [{ ...base, sources: ["bookmark"], savedAt: base.postedAt }],

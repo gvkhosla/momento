@@ -88,14 +88,16 @@ export function statsVault(home) {
 }
 
 function scoreItem(item, phrase, tokens) {
-  const { text, author, links, full, words } = searchDocument(item);
+  const { text, author, links, article, full, words } = searchDocument(item);
   let score = 0;
 
+  if (article.includes(phrase)) score += 28;
   if (text.includes(phrase)) score += 20;
   if (author.includes(phrase)) score += 16;
   if (links.includes(phrase)) score += 10;
 
   for (const token of tokens) {
+    if (article.includes(token)) score += 8;
     if (author.includes(token)) score += 7;
     if (text.includes(token)) score += 5;
     if (links.includes(token)) score += 3;
@@ -110,7 +112,8 @@ function searchDocument(item) {
   const cached = searchDocuments.get(item);
   if (cached) return cached;
   const extracted = item.extraction || {};
-  const text = normalize(`${item.text || ""} ${extracted.title || ""} ${extracted.excerpt || ""} ${extracted.text || ""}`);
+  const article = normalize(`${extracted.title || ""} ${extracted.excerpt || ""} ${extracted.text || ""}`);
+  const text = normalize(`${item.text || ""} ${article}`);
   const author = normalize(
     `${item.author?.displayName || ""} ${item.author?.handle || ""} ${extracted.site || ""}`,
   );
@@ -121,7 +124,7 @@ function searchDocument(item) {
     ].join(" "),
   );
   const full = `${author} ${text} ${links}`;
-  const document = { text, author, links, full, words: full.split(/\s+/) };
+  const document = { text, author, links, article, full, words: full.split(/\s+/) };
   searchDocuments.set(item, document);
   return document;
 }
