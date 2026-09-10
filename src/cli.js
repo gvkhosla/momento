@@ -13,6 +13,7 @@ import { sendBriefEmail, speakBrief } from "./mail.js";
 import { launchAgentInstalled, launchAgentPath, writeLaunchAgent } from "./install.js";
 import { startScheduler } from "./scheduler.js";
 import { createServer } from "./server.js";
+import { captureUrl } from "./capture.js";
 import { searchVault, statsVault } from "./search.js";
 import {
   clearDemo,
@@ -30,6 +31,7 @@ function printHelp() {
 Usage:
   momento serve [--port 4177] [--home DIR]   Start the app, sync API, and daily bot
   momento phone [--port 4177]                Open a secure phone tunnel
+  momento capture <url>                      Save a link into the vault
   momento search <query> [--source TYPE]     Instant local keyword search
   momento search <query> --deep              QMD hybrid lexical + vector search
   momento ask <question> [--deep]            Answer from saved posts locally
@@ -157,6 +159,18 @@ async function main() {
     console.log(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== "re_xxxxxxxxx"
       ? "Resend: configured"
       : "Resend: replace re_xxxxxxxxx in .env with your real API key");
+    return;
+  }
+
+  if (command === "capture") {
+    const raw = args._.slice(1).join(" ").trim();
+    if (!raw) throw new Error("Usage: momento capture <url>");
+    const result = await captureUrl(home, raw, args.source || "bookmark");
+    const item = result.item;
+    const extraction = item.extraction?.status || "pending";
+    console.log(`${item.url}`);
+    console.log(`${item.text.replace(/\s+/g, " ").slice(0, 180)}`);
+    console.log(`saved · ${result.inserted ? "inserted" : result.updated ? "updated" : "unchanged"} · extract ${extraction}`);
     return;
   }
 
@@ -375,8 +389,10 @@ function printHits(hits) {
   for (const item of hits) {
     const sources = item.sources.map((source) => sourceLabel(source)).join(" + ");
     console.log(`\n${dateLabel(item.postedAt)} · @${item.author.handle} · ${sources}`);
-    console.log(`  ${item.text.replace(/\s+/g, " ").slice(0, 180)}`);
-    console.log(`  ${item.url}`);
+    const title = item.extraction?.title;
+    const body = (title && title !== item.text ? `${title} — ${item.text}` : item.text).replace(/\s+/g, " ").slice(0, 180);
+    console.log(`  ${body}`);
+    console.log(`  ${item.extraction?.url || item.url}`);
   }
   console.log(`\n${hits.length} match${hits.length === 1 ? "" : "es"}`);
 }

@@ -94,7 +94,9 @@ async function fetchPageBookmark(url, source, options) {
     source,
     author: { handle: host.replace(/\./g, "_"), displayName: host },
     links: [{ url: finalUrl, expandedUrl: finalUrl, title }],
-    extraction: extracted?.status === "ready" ? { ...extracted, extractedAt: now } : null,
+    extraction: extracted
+      ? { ...extracted, extractedAt: extracted.status === "ready" ? now : extracted.extractedAt }
+      : { status: "failed", url: finalUrl, error: "extract_failed" },
   };
 }
 

@@ -15,6 +15,7 @@ export function needsEnrichment(item) {
   if (!item?.sources?.includes("bookmark")) return false;
   const status = enrichmentStatus(item);
   if (status === "ready" || status === "skipped" || status === "none") return false;
+  if (status === "failed" && Number(item.extraction?.attempts || 0) >= 5) return false;
   return Boolean(pickExtractUrl(item));
 }
 
@@ -55,6 +56,7 @@ export async function enrichVault(home, options = {}) {
 }
 
 async function enrichItem(home, item, options) {
+  if (!needsEnrichment(item) && item.extraction) return item;
   const url = pickExtractUrl(item);
   if (!url) {
     return withExtraction(item, { status: "none", reason: "no_external_url" });
@@ -88,6 +90,7 @@ async function enrichItem(home, item, options) {
       status: "failed",
       url,
       error: String(error?.message || error),
+      attempts: Number(item.extraction?.attempts || 0) + 1,
     });
   }
 }
